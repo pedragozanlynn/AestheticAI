@@ -1,7 +1,13 @@
 import React from "react";
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-
+import {
+  createConsultantWithEmailAndPassword,
+  updateProfile,
+  auth,
+  db,
+} from "../../config/firebase";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 
 export default function Step3Review() {
   const router = useRouter();
