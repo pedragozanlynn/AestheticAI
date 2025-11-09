@@ -1,12 +1,8 @@
-import React from "react";
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from "react-native";
+import React, { useState } from "react";
+import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Linking, StyleSheet } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import {
-  createConsultantWithEmailAndPassword,
-  updateProfile,
-  auth,
-  db,
-} from "../../config/firebase";
+import { auth, db } from "../../config/firebase";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 
 export default function Step3Review() {
@@ -14,43 +10,82 @@ export default function Step3Review() {
   const params = useLocalSearchParams();
   const data = params.data ? JSON.parse(params.data) : {};
   const step2 = data.step2 || {};
-  const availability = step2.availability || [];
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    if (loading) return;
+    setLoading(true);
+
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+      const user = userCredential.user;
+      await updateProfile(user, { displayName: data.fullName });
+
+      await setDoc(doc(db, "consultants", user.uid), {
+        fullName: data.fullName,
+        email: data.email,
+        address: data.address,
+        consultantType: data.consultantType,
+        specialization: step2.specialization,
+        education: step2.education,
+        experience: step2.experience || "",
+        licenseNumber: step2.licenseNumber || "",
+        availability: step2.availability,
+        portfolioURL: step2.portfolioLink || null,
+        submittedAt: serverTimestamp(),
+        status: "pending"
+       
+      });
+
+      Alert.alert("Submitted ✅", "Your registration is pending admin approval.");
+      router.replace("/Consultant/PendingApproval");
+    } catch (error) {
+      console.error("Submission error:", error);
+      Alert.alert("Error", error.message || "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>Step 3 – Review Information</Text>
 
       <Text style={styles.section}>Personal Information</Text>
-      <Text>Full Name: {data.fullName || "N/A"}</Text>
-      <Text>Email: {data.email || "N/A"}</Text>
-      <Text>Complete Address: {data.address || "N/A"}</Text>
+      <Text>Full Name: {data.fullName}</Text>
+      <Text>Email: {data.email}</Text>
+      <Text>Address: {data.address}</Text>
 
       <Text style={styles.section}>Consultant Details</Text>
-      <Text>Consultant Type: {data.consultantType || "N/A"}</Text>
-      <Text>Specialization: {step2.specialization || "N/A"}</Text>
-      <Text>Education: {step2.education || "N/A"}</Text>
-      <Text>Experience: {step2.experience || "N/A"}</Text>
-      <Text>License Number: {step2.licenseNumber || "N/A"}</Text>
-      <Text>Portfolio: {step2.portfolio ? step2.portfolio.name : "N/A"}</Text>
-
-      <Text style={styles.section}>Availability</Text>
-      {availability.length > 0 ? (
-        availability.map((a, i) => (
-          <Text key={i}>• {a.day}: {a.am} / {a.pm}</Text>
-        ))
-      ) : (
-        <Text>Not specified</Text>
+      <Text>Type: {data.consultantType}</Text>
+      <Text>Specialization: {step2.specialization}</Text>
+      <Text>Education: {step2.education}</Text>
+      {data.consultantType === "professional" && (
+        <>
+          <Text>Experience: {step2.experience} years</Text>
+          <Text>License Number: {step2.licenseNumber}</Text>
+        </>
       )}
 
+      <Text style={styles.section}>Availability</Text>
+      {step2.availability.length > 0 ? step2.availability.map((a, i) => (
+        <Text key={i}>• {a.day}: {a.am} / {a.pm}</Text>
+      )) : <Text>Not specified</Text>}
+
+      <Text style={styles.section}>Portfolio</Text>
+      {step2.portfolioLink ? (
+        <Text style={styles.link} onPress={() => Linking.openURL(step2.portfolioLink)}>
+          📎 View Portfolio
+        </Text>
+      ) : <Text>No portfolio link provided</Text>}
+
       <View style={styles.row}>
-        <TouchableOpacity style={styles.back} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.back} onPress={() => router.back()} disabled={loading}>
           <Text>Back</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.submit}
-          onPress={() => alert("Submitted ✅")}
-        >
-          <Text style={{ color: "#fff" }}>Submit</Text>
+
+        <TouchableOpacity style={[styles.submit, loading && { opacity: 0.7 }]} onPress={handleSubmit} disabled={loading}>
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Submit</Text>}
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -64,4 +99,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between", marginTop: 20 },
   back: { flex: 1, backgroundColor: "#ccc", alignItems: "center", padding: 12, borderRadius: 8, marginRight: 5 },
   submit: { flex: 1, backgroundColor: "#0F3E48", alignItems: "center", padding: 12, borderRadius: 8, marginLeft: 5 },
+  submitText: { color: "#fff", fontWeight: "600" },
+  link: { color: "#0F3E48", textDecorationLine: "underline", marginVertical: 5 }
 });

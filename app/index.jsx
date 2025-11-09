@@ -34,9 +34,9 @@ export default function Index() {
             <Text style={styles.brand}>Aesthetic AI</Text>
             <Text
               style={styles.tagline}
-              onLongPress={() => router.push("/AdminLogin")}
+              onLongPress={() => router.push("/Admin/Login")}
             >
-              Your dream space starts here ✨
+              Your dream space starts here 
             </Text>
           </View>
 
@@ -52,7 +52,8 @@ export default function Index() {
 
           <TouchableOpacity
             style={[styles.button, styles.consultantButton]}
-            onPress={() => router.push({ pathname: "/Login", params: { role: "consultant" } })}
+           onPress={() => router.push({ pathname: "/Login", params: { role: "consultant" } })}
+
           >
             <Text style={styles.consultantText}>Consultant</Text>
           </TouchableOpacity>
@@ -65,8 +66,8 @@ export default function Index() {
 }
 
 const styles = StyleSheet.create({
-  background: { flex: 1 },
-  image: { resizeMode: "cover", opacity: 0.85 },
+  background: { flex: 3 },
+  image: { resizeMode: "cover", opacity: 0.95 },
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.55)",
@@ -85,7 +86,7 @@ const styles = StyleSheet.create({
   },
   brand: {
     color: "#ffffff",
-    fontSize: 46,
+    fontSize: 40,
     fontWeight: "900",
     letterSpacing: 3,
     marginVertical: 12,

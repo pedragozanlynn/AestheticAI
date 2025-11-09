@@ -1,34 +1,30 @@
 import React, { useState, useEffect, useRef } from "react";
 import { ScrollView, Text, TextInput, TouchableOpacity, Alert, StyleSheet, View } from "react-native";
 import { Picker } from "@react-native-picker/picker";
-import * as DocumentPicker from "expo-document-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// session storage to keep form values while app is running (prevents automatic reload on back/forth)
+// session storage
 let sessionFormData = null;
 
 export default function Step2Details() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const initialized = useRef(false);
-  const saveTimer = useRef(null);
 
   const [formData, setFormData] = useState({
     specialization: "",
     education: "",
     experience: "",
     licenseNumber: "",
-    portfolio: null,
+    portfolioLink: "", // 🔹 Google Drive link
     availability: [],
     day: "",
     am: "",
     pm: ""
   });
 
-  // persist in-memory session copy so navigating back/forth during the app session
-  // does not trigger a reload from params/AsyncStorage that would overwrite current edits
   useEffect(() => {
     if (sessionFormData) {
       setFormData(sessionFormData);
@@ -50,17 +46,13 @@ export default function Step2Details() {
         }
 
         if (params?.data) {
-          try {
-            const step1 = JSON.parse(params.data);
-            if (step1.step2) {
-              setFormData(prev => {
-                const merged = { ...prev, ...step1.step2 };
-                sessionFormData = merged;
-                return merged;
-              });
-            }
-          } catch (e) {
-            console.warn("Failed to parse params.data", e);
+          const step1 = JSON.parse(params.data);
+          if (step1.step2) {
+            setFormData(prev => {
+              const merged = { ...prev, ...step1.step2 };
+              sessionFormData = merged;
+              return merged;
+            });
           }
         }
       } catch (err) {
@@ -70,40 +62,15 @@ export default function Step2Details() {
     init();
   }, [params?.data]);
 
-  // keep sessionFormData updated whenever formData changes
   useEffect(() => {
     sessionFormData = formData;
   }, [formData]);
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current);
-        saveTimer.current = null;
-      }
-    };
-  }, []);
-
-  const saveStep2 = async (next) => {
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
-    }
-    saveTimer.current = setTimeout(async () => {
-      try {
-        await AsyncStorage.setItem("step2Data", JSON.stringify(next));
-      } catch (err) {
-        console.error("Step2 save error:", err);
-      }
-      saveTimer.current = null;
-    }, 500);
-  };
 
   const handleInputChange = (field, value) => {
     setFormData(prev => {
       const next = { ...prev, [field]: value };
       sessionFormData = next;
-      saveStep2(next);
+      AsyncStorage.setItem("step2Data", JSON.stringify(next));
       return next;
     });
   };
@@ -116,7 +83,7 @@ export default function Step2Details() {
       const newAvailability = [...prev.availability, { day: prev.day, am: prev.am, pm: prev.pm }];
       const next = { ...prev, availability: newAvailability, day: "", am: "", pm: "" };
       sessionFormData = next;
-      saveStep2(next);
+      AsyncStorage.setItem("step2Data", JSON.stringify(next));
       return next;
     });
   };
@@ -126,80 +93,14 @@ export default function Step2Details() {
       const newAvailability = prev.availability.filter((_, i) => i !== index);
       const next = { ...prev, availability: newAvailability };
       sessionFormData = next;
-      saveStep2(next);
+      AsyncStorage.setItem("step2Data", JSON.stringify(next));
       return next;
     });
   };
 
-  // Robust portfolio upload handling and normalized response shapes
-  const handlePortfolio = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ["image/*", "application/pdf"],
-        copyToCacheDirectory: true
-      });
-
-      if (!result) return;
-
-      // Newer SDK may return { canceled: true } or { canceled:false, assets: [...] }
-      if (result.canceled) return;
-
-      let file = null;
-
-      // expo-document-picker older shape: { type: 'success'|'cancel', uri, name, size, mimeType }
-      if (result.type === "success" || result.type === "picked") {
-        file = result;
-      } else if (Array.isArray(result.assets) && result.assets.length > 0) {
-        // newer shape with assets array
-        file = result.assets[0];
-      } else if (result.uri || result.fileCopyUri) {
-        // fallback
-        file = result;
-      } else {
-        console.warn("Unsupported DocumentPicker result:", result);
-        return;
-      }
-
-      const uri = file.uri || file.fileCopyUri || null;
-      const name = file.name || (uri ? uri.split("/").pop() : "file");
-      const size = typeof file.size === "number" ? file.size : (file.fileSize || 0);
-      const mimeType = file.mimeType || file.type || "application/octet-stream";
-
-      if (!uri) {
-        Alert.alert("Upload Error", "Could not access selected file. Try a different file.");
-        return;
-      }
-
-      const safePortfolio = { uri, name, size, mimeType };
-
-      const next = { ...formData, portfolio: safePortfolio };
-      setFormData(next);
-      sessionFormData = next;
-      try {
-        await AsyncStorage.setItem("step2Data", JSON.stringify(next));
-      } catch (err) {
-        console.error("Portfolio save error:", err);
-      }
-
-      Alert.alert("Success", `Uploaded: ${name}`);
-    } catch (err) {
-      console.error("Portfolio error:", err);
-      Alert.alert("Upload Error", "Could not pick file. Please try again.");
-    }
-  };
-
   const handleBack = async () => {
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
-      saveTimer.current = null;
-    }
-    try {
-      await AsyncStorage.setItem("step2Data", JSON.stringify(formData));
-      router.back();
-    } catch (err) {
-      console.error("Back save error:", err);
-      router.back();
-    }
+    await AsyncStorage.setItem("step2Data", JSON.stringify(formData));
+    router.back();
   };
 
   const handleNext = async () => {
@@ -207,26 +108,17 @@ export default function Step2Details() {
       return Alert.alert("Missing Field", "Please fill required fields.");
     }
 
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
-      saveTimer.current = null;
-    }
+    await AsyncStorage.setItem("step2Data", JSON.stringify(formData));
+    const step1Data = params?.data ? JSON.parse(params.data) : {};
+    const dataToSend = {
+      ...step1Data,
+      step2: formData
+    };
 
-    try {
-      await AsyncStorage.setItem("step2Data", JSON.stringify(formData));
-      const step1Data = params?.data ? JSON.parse(params.data) : {};
-      const dataToSend = {
-        ...step1Data,
-        step2: formData
-      };
-
-      router.push({
-        pathname: "/Consultant/Step3Review",
-        params: { data: JSON.stringify(dataToSend) }
-      });
-    } catch (error) {
-      Alert.alert("Error", "Failed to save data. Please try again.");
-    }
+    router.push({
+      pathname: "/Consultant/Step3Review",
+      params: { data: JSON.stringify(dataToSend) }
+    });
   };
 
   const consultantType = params?.data ? (JSON.parse(params.data).consultantType || "") : "";
@@ -325,9 +217,13 @@ export default function Step2Details() {
           </View>
         ))}
 
-      <TouchableOpacity style={styles.upload} onPress={handlePortfolio}>
-        <Text>{formData.portfolio ? "Portfolio Uploaded ✅" : "Upload Portfolio"}</Text>
-      </TouchableOpacity>
+      <Text style={styles.label}>Portfolio (Google Drive Link)</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Enter Google Drive link"
+        value={formData.portfolioLink || ""}
+        onChangeText={(v) => handleInputChange("portfolioLink", v)}
+      />
 
       <View style={styles.row}>
         <TouchableOpacity style={styles.back} onPress={handleBack}>
@@ -340,6 +236,7 @@ export default function Step2Details() {
     </ScrollView>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
