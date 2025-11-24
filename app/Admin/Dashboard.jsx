@@ -2,202 +2,148 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
-  TouchableOpacity,
-  ScrollView,
   StyleSheet,
-  Linking,
-  Alert,
+  ScrollView,
   ActivityIndicator,
 } from "react-native";
-import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { db } from "../../config/firebase";
 
+// Bottom Nav
+import BottomNavbar from "../components/BottomNav";
+
 export default function Dashboard() {
-  const [consultants, setConsultants] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Fetch all consultant records
+  // Dashboard Stats
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [totalConsultants, setTotalConsultants] = useState(0);
+  const [pendingConsultants, setPendingConsultants] = useState(0);
+  const [approvedConsultants, setApprovedConsultants] = useState(0);
+  const [rejectedConsultants, setRejectedConsultants] = useState(0);
+
   useEffect(() => {
-    const fetchConsultants = async () => {
+    const loadDashboardStats = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "consultants"));
-        const list = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setConsultants(list);
+        // Fetch Users
+        const usersSnap = await getDocs(collection(db, "users"));
+        setTotalUsers(usersSnap.size);
+
+        // Fetch Consultants
+        const consultantsSnap = await getDocs(collection(db, "consultants"));
+        const consultants = consultantsSnap.docs.map((doc) => doc.data());
+
+        setTotalConsultants(consultants.length);
+        setPendingConsultants(
+          consultants.filter((c) => !c.status || c.status === "pending").length
+        );
+        setApprovedConsultants(
+          consultants.filter((c) => c.status === "accepted").length
+        );
+        setRejectedConsultants(
+          consultants.filter((c) => c.status === "rejected").length
+        );
       } catch (error) {
-        console.error("Error fetching consultants:", error);
-        Alert.alert("Error", "Failed to load consultant data.");
+        console.log("Dashboard Error:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchConsultants();
+    loadDashboardStats();
   }, []);
 
-  // ✅ Approve consultant
-  const handleApprove = async (id) => {
-    try {
-      await updateDoc(doc(db, "consultants", id), { status: "accepted" });
-      Alert.alert("Success", "Consultant approved successfully!");
-      setConsultants((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, status: "accepted" } : c))
-      );
-    } catch (error) {
-      console.error(error);
-      Alert.alert("Error", "Failed to approve consultant.");
-    }
-  };
-
-  // ✅ Reject consultant
-  const handleReject = async (id) => {
-    try {
-      await updateDoc(doc(db, "consultants", id), { status: "rejected" });
-      Alert.alert("Success", "Consultant rejected successfully!");
-      setConsultants((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, status: "rejected" } : c))
-      );
-    } catch (error) {
-      console.error(error);
-      Alert.alert("Error", "Failed to reject consultant.");
-    }
-  };
-
-  // ✅ UI
   if (loading) {
     return (
-      <View style={styles.loaderContainer}>
+      <View style={styles.loader}>
         <ActivityIndicator size="large" color="#0F3E48" />
-        <Text>Loading consultant data...</Text>
+        <Text>Loading Dashboard...</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>Consultant Applications</Text>
+    <View style={{ flex: 1, paddingBottom: 90 }}>
+      <ScrollView style={styles.container}>
+        <Text style={styles.title}>Admin Dashboard</Text>
 
-      {consultants.length === 0 ? (
-        <Text style={styles.noData}>No consultant records found.</Text>
-      ) : (
-        consultants.map((c) => (
-          <View key={c.id} style={styles.card}>
-            <Text style={styles.name}>{c.fullName}</Text>
-            <Text style={styles.field}>📧 Email: {c.email}</Text>
-            <Text style={styles.field}>🏠 Address: {c.address}</Text>
-            <Text style={styles.field}>👔 Consultant Type: {c.consultantType}</Text>
-            <Text style={styles.field}>🎓 Education: {c.education}</Text>
-            <Text style={styles.field}>💼 Specialization: {c.specialization}</Text>
-            {c.experience ? (
-              <Text style={styles.field}>🧠 Experience: {c.experience}</Text>
-            ) : null}
-            {c.licenseNumber ? (
-              <Text style={styles.field}>📜 License #: {c.licenseNumber}</Text>
-            ) : null}
+        {/* Statistics Cards */}
+        <View style={styles.card}>
+          <Text style={styles.label}>Total Users</Text>
+          <Text style={styles.value}>{totalUsers}</Text>
+        </View>
 
-            {/* Availability Section */}
-            <Text style={styles.sectionTitle}>🕒 Availability:</Text>
-            {Array.isArray(c.availability) && c.availability.length > 0 ? (
-              c.availability.map((slot, i) => (
-                <Text key={i} style={styles.field}>
-                  • {slot.day}: {slot.am ? "AM " : ""} {slot.pm ? "PM" : ""}
-                </Text>
-              ))
-            ) : (
-              <Text style={styles.field}>Not specified</Text>
-            )}
+        <View style={styles.card}>
+          <Text style={styles.label}>Total Consultants</Text>
+          <Text style={styles.value}>{totalConsultants}</Text>
+        </View>
 
-            {/* Portfolio Link */}
-            <Text style={styles.sectionTitle}>📎 Portfolio:</Text>
-            {c.portfolioURL ? (
-              <TouchableOpacity onPress={() => Linking.openURL(c.portfolioURL)}>
-                <Text style={styles.link}>View Portfolio</Text>
-              </TouchableOpacity>
-            ) : (
-              <Text style={styles.field}>No portfolio uploaded</Text>
-            )}
+        <View style={styles.card}>
+          <Text style={styles.label}>Pending Consultants</Text>
+          <Text style={styles.pending}>{pendingConsultants}</Text>
+        </View>
 
-            {/* Status */}
-            <Text style={styles.status}>
-              Status:{" "}
-              <Text
-                style={{
-                  color:
-                    c.status === "accepted"
-                      ? "green"
-                      : c.status === "rejected"
-                      ? "red"
-                      : "orange",
-                  fontWeight: "bold",
-                }}
-              >
-                {c.status || "pending"}
-              </Text>
-            </Text>
+        <View style={styles.card}>
+          <Text style={styles.label}>Approved Consultants</Text>
+          <Text style={styles.approved}>{approvedConsultants}</Text>
+        </View>
 
-            {/* Buttons */}
-            <View style={styles.btnRow}>
-              <TouchableOpacity
-                style={[styles.btn, styles.accept]}
-                onPress={() => handleApprove(c.id)}
-                disabled={c.status === "accepted"}
-              >
-                <Text style={styles.btnText}>Accept</Text>
-              </TouchableOpacity>
+        <View style={styles.card}>
+          <Text style={styles.label}>Rejected Consultants</Text>
+          <Text style={styles.rejected}>{rejectedConsultants}</Text>
+        </View>
+      </ScrollView>
 
-              <TouchableOpacity
-                style={[styles.btn, styles.reject]}
-                onPress={() => handleReject(c.id)}
-                disabled={c.status === "rejected"}
-              >
-                <Text style={styles.btnText}>Reject</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ))
-      )}
-    </ScrollView>
+      <BottomNavbar role="admin" />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff", padding: 15 },
-  loaderContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  container: { flex: 1, backgroundColor: "#fff", padding: 20 },
+  loader: { flex: 1, justifyContent: "center", alignItems: "center" },
+
   title: {
-    fontSize: 22,
-    fontWeight: "bold",
-    textAlign: "center",
+    fontSize: 26,
+    fontWeight: "700",
     color: "#0F3E48",
-    marginVertical: 15,
+    textAlign: "center",
+    marginVertical: 20,
   },
-  noData: { textAlign: "center", color: "#777", fontSize: 16 },
+
   card: {
-    backgroundColor: "#f8f8f8",
-    padding: 15,
-    borderRadius: 12,
+    backgroundColor: "#F4F8F9",
+    padding: 20,
+    borderRadius: 14,
     marginBottom: 15,
     elevation: 3,
   },
-  name: { fontSize: 18, fontWeight: "bold", color: "#0F3E48", marginBottom: 5 },
-  field: { fontSize: 14, color: "#333", marginBottom: 3 },
-  sectionTitle: { fontWeight: "bold", marginTop: 8, color: "#0F3E48" },
-  link: {
-    color: "#0066cc",
-    textDecorationLine: "underline",
-    marginVertical: 3,
+
+  label: { fontSize: 16, color: "#4A4A4A" },
+
+  value: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#0F3E48",
+    marginTop: 5,
   },
-  status: { fontSize: 14, marginTop: 6 },
-  btnRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 10 },
-  btn: {
-    flex: 1,
-    padding: 10,
-    borderRadius: 8,
-    alignItems: "center",
-    marginHorizontal: 5,
+
+  pending: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#f39c12",
+    marginTop: 5,
   },
-  accept: { backgroundColor: "#2ecc71" },
-  reject: { backgroundColor: "#e74c3c" },
-  btnText: { color: "#fff", fontWeight: "bold" },
+  approved: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#27ae60",
+    marginTop: 5,
+  },
+  rejected: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#e74c3c",
+    marginTop: 5,
+  },
 });

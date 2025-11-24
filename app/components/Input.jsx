@@ -10,9 +10,10 @@ export default function Input({ style, secureTextEntry, ...props }) {
       <TextInput
         {...props}
         style={[styles.input, style]}
-        placeholderTextColor="#999"
+        placeholderTextColor="#8A9A9C"
         secureTextEntry={secureTextEntry && !showPassword}
       />
+
       {secureTextEntry && (
         <TouchableOpacity
           style={styles.eyeIcon}
@@ -20,8 +21,8 @@ export default function Input({ style, secureTextEntry, ...props }) {
         >
           <Ionicons
             name={showPassword ? "eye-off-outline" : "eye-outline"}
-            size={24}
-            color="#666"
+            size={22}
+            color="#6A7A7C"
           />
         </TouchableOpacity>
       )}
@@ -31,24 +32,31 @@ export default function Input({ style, secureTextEntry, ...props }) {
 
 const styles = StyleSheet.create({
   container: {
-    position: "relative",
     width: "100%",
-    marginBottom: 14,
   },
+
   input: {
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 12,
-    padding: 12,
-    paddingRight: 44,
+    borderColor: "#E1E8EA",
+    borderRadius: 10,
+    paddingVertical: 15,
+    paddingHorizontal: 16,
+    paddingRight: 48,
     fontSize: 15,
-    color: "#111",
+    color: "#0F3E48",
+
+    // Subtle iOS-like shadow
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
+
   eyeIcon: {
     position: "absolute",
-    right: 12,
-    bottom: 10,
-    height: "100%",
-    justifyContent: "center",
-  }
+    right: 16,
+    top: "45%",
+    transform: [{ translateY: -15 }],
+  },
 });

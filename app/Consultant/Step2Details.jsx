@@ -5,7 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// session storage
+// session cache
 let sessionFormData = null;
 
 export default function Step2Details() {
@@ -18,13 +18,14 @@ export default function Step2Details() {
     education: "",
     experience: "",
     licenseNumber: "",
-    portfolioLink: "", // 🔹 Google Drive link
+    portfolioLink: "",
     availability: [],
     day: "",
     am: "",
     pm: ""
   });
 
+  // ---------------------- LOAD FROM STORAGE ----------------------
   useEffect(() => {
     if (sessionFormData) {
       setFormData(sessionFormData);
@@ -59,22 +60,21 @@ export default function Step2Details() {
         console.error("Step2 load error:", err);
       }
     };
+
     init();
   }, [params?.data]);
 
-  useEffect(() => {
-    sessionFormData = formData;
-  }, [formData]);
-
+  // ---------------------- UNIVERSAL AUTO-SAVE ----------------------
   const handleInputChange = (field, value) => {
     setFormData(prev => {
       const next = { ...prev, [field]: value };
       sessionFormData = next;
-      AsyncStorage.setItem("step2Data", JSON.stringify(next));
+      AsyncStorage.setItem("step2Data", JSON.stringify(next)); // AUTO-SAVE
       return next;
     });
   };
 
+  // ---------------------- AVAILABILITY ADD ------------------------
   const addAvailability = () => {
     if (!formData.day || !formData.am || !formData.pm) {
       return Alert.alert("Missing Field", "Please fill all availability fields.");
@@ -83,21 +83,23 @@ export default function Step2Details() {
       const newAvailability = [...prev.availability, { day: prev.day, am: prev.am, pm: prev.pm }];
       const next = { ...prev, availability: newAvailability, day: "", am: "", pm: "" };
       sessionFormData = next;
-      AsyncStorage.setItem("step2Data", JSON.stringify(next));
+      AsyncStorage.setItem("step2Data", JSON.stringify(next)); // AUTO-SAVE
       return next;
     });
   };
 
+  // ---------------------- REMOVE AVAILABILITY ----------------------
   const removeAvailability = (index) => {
     setFormData(prev => {
       const newAvailability = prev.availability.filter((_, i) => i !== index);
       const next = { ...prev, availability: newAvailability };
       sessionFormData = next;
-      AsyncStorage.setItem("step2Data", JSON.stringify(next));
+      AsyncStorage.setItem("step2Data", JSON.stringify(next)); // AUTO-SAVE
       return next;
     });
   };
 
+  // ---------------------- NAVIGATION ------------------------------
   const handleBack = async () => {
     await AsyncStorage.setItem("step2Data", JSON.stringify(formData));
     router.back();
@@ -109,6 +111,7 @@ export default function Step2Details() {
     }
 
     await AsyncStorage.setItem("step2Data", JSON.stringify(formData));
+
     const step1Data = params?.data ? JSON.parse(params.data) : {};
     const dataToSend = {
       ...step1Data,
@@ -123,13 +126,15 @@ export default function Step2Details() {
 
   const consultantType = params?.data ? (JSON.parse(params.data).consultantType || "") : "";
 
+  // ---------------------- UI ----------------------
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>Step 2 – Consultant Details</Text>
       <Text style={styles.sub}>
-        Consultant Type: {consultantType === "professional" ? "Professional" : "Fresh Graduate"}
+        Consultant Type: {consultantType === "Professional" ? "Professional" : "Fresh Graduate"}
       </Text>
 
+      {/* SPECIALIZATION */}
       <Text style={styles.label}>Specialization</Text>
       <Picker
         selectedValue={formData.specialization}
@@ -137,11 +142,16 @@ export default function Step2Details() {
         style={styles.picker}
       >
         <Picker.Item label="Select specialization" value="" />
+        <Picker.Item label="Architecture" value="Architecture" />
+        <Picker.Item label="Structural Engineering" value="Structural Engineering" />
         <Picker.Item label="Interior Design" value="Interior Design" />
-        <Picker.Item label="Structural" value="Structural" />
-        <Picker.Item label="Landscape" value="Landscape" />
+        <Picker.Item label="Landscape Architecture" value="Landscape Architecture" />
+        <Picker.Item label="Electrical Engineering" value="Electrical Engineering" />
+        <Picker.Item label="Plumbing / Sanitary Engineering" value="Plumbing / Sanitary Engineering" />
+        <Picker.Item label="Civil Engineering" value="Civil Engineering" />
       </Picker>
 
+      {/* EDUCATION */}
       <Text style={styles.label}>Education</Text>
       <Picker
         selectedValue={formData.education}
@@ -149,11 +159,17 @@ export default function Step2Details() {
         style={styles.picker}
       >
         <Picker.Item label="Select degree" value="" />
-        <Picker.Item label="Bachelor of Interior Design" value="Bachelor of Interior Design" />
         <Picker.Item label="Bachelor of Architecture" value="Bachelor of Architecture" />
+        <Picker.Item label="Bachelor of Interior Design" value="Bachelor of Interior Design" />
+        <Picker.Item label="Bachelor of Landscape Architecture" value="Bachelor of Landscape Architecture" />
+        <Picker.Item label="Bachelor of Science in Civil Engineering" value="BSCE" />
+        <Picker.Item label="Bachelor of Science in Electrical Engineering" value="BSEE" />
+        <Picker.Item label="Bachelor of Science in Mechanical Engineering" value="BSME" />
+        <Picker.Item label="Bachelor of Science in Sanitary Engineering" value="BSSE" />
       </Picker>
 
-      {consultantType === "professional" && (
+      {/* PRO ONLY FIELDS */}
+      {consultantType === "Professional" && (
         <>
           <Text style={styles.label}>Experience (Years)</Text>
           <TextInput
@@ -174,6 +190,7 @@ export default function Step2Details() {
         </>
       )}
 
+      {/* AVAILABILITY */}
       <Text style={styles.label}>Availability</Text>
       <Picker
         selectedValue={formData.day}
@@ -200,6 +217,7 @@ export default function Step2Details() {
             value={formData.pm}
             onChangeText={(v) => handleInputChange("pm", v)}
           />
+
           <TouchableOpacity style={styles.addButton} onPress={addAvailability}>
             <Ionicons name="add" size={20} color="#fff" />
             <Text style={styles.addText}>Add Availability</Text>
@@ -207,24 +225,25 @@ export default function Step2Details() {
         </>
       ) : null}
 
-      {formData.availability.length > 0 &&
-        formData.availability.map((a, i) => (
-          <View key={i} style={styles.availabilityItem}>
-            <Text style={styles.avail}>• {a.day}: {a.am} / {a.pm}</Text>
-            <TouchableOpacity onPress={() => removeAvailability(i)}>
-              <Ionicons name="close-circle" size={20} color="#FF3B30" />
-            </TouchableOpacity>
-          </View>
-        ))}
+      {formData.availability.map((a, i) => (
+        <View key={i} style={styles.availabilityItem}>
+          <Text style={styles.avail}>• {a.day}: {a.am} / {a.pm}</Text>
+          <TouchableOpacity onPress={() => removeAvailability(i)}>
+            <Ionicons name="close-circle" size={20} color="#FF3B30" />
+          </TouchableOpacity>
+        </View>
+      ))}
 
+      {/* PORTFOLIO */}
       <Text style={styles.label}>Portfolio (Google Drive Link)</Text>
       <TextInput
         style={styles.input}
         placeholder="Enter Google Drive link"
-        value={formData.portfolioLink || ""}
+        value={formData.portfolioLink}
         onChangeText={(v) => handleInputChange("portfolioLink", v)}
       />
 
+      {/* BUTTONS */}
       <View style={styles.row}>
         <TouchableOpacity style={styles.back} onPress={handleBack}>
           <Text style={styles.backText}>Back</Text>
@@ -237,106 +256,20 @@ export default function Step2Details() {
   );
 }
 
-
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    backgroundColor: "#fff",
-    flex: 1
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#0F3E48",
-    marginBottom: 15
-  },
-  sub: {
-    fontSize: 16,
-    marginBottom: 15,
-    color: "#666"
-  },
-  label: {
-    fontWeight: "600",
-    marginTop: 10,
-    marginBottom: 5,
-    color: "#333"
-  },
-  picker: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    backgroundColor: "#fff",
-    marginBottom: 10
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 10,
-    backgroundColor: "#fff"
-  },
-  addButton: {
-    flexDirection: "row",
-    backgroundColor: "#0F3E48",
-    borderRadius: 8,
-    padding: 10,
-    justifyContent: "center",
-    alignItems: "center",
-    marginVertical: 5
-  },
-  addText: {
-    color: "#fff",
-    marginLeft: 5,
-    fontWeight: "600"
-  },
-  availabilityItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingRight: 10,
-    marginTop: 6
-  },
-  avail: {
-    marginLeft: 10,
-    marginTop: 5,
-    color: "#333"
-  },
-  upload: {
-    backgroundColor: "#FFD700",
-    alignItems: "center",
-    padding: 10,
-    borderRadius: 8,
-    marginVertical: 10
-  },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 20,
-    marginBottom: 40
-  },
-  back: {
-    flex: 1,
-    backgroundColor: "#E5E5EA",
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 8,
-    marginRight: 5
-  },
-  backText: {
-    color: "#333",
-    fontWeight: "600"
-  },
-  next: {
-    flex: 1,
-    backgroundColor: "#0F3E48",
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 8,
-    marginLeft: 5
-  },
-  nextText: {
-    color: "#fff",
-    fontWeight: "600"
-  }
+  container: { padding: 20, backgroundColor: "#fff", flex: 1 },
+  title: { fontSize: 22, fontWeight: "bold", color: "#0F3E48", marginBottom: 15 },
+  sub: { fontSize: 16, marginBottom: 15, color: "#666" },
+  label: { fontWeight: "600", marginTop: 10, marginBottom: 5, color: "#333" },
+  picker: { borderWidth: 1, borderColor: "#ccc", borderRadius: 8, backgroundColor: "#fff", marginBottom: 10 },
+  input: { borderWidth: 1, borderColor: "#ccc", borderRadius: 8, padding: 12, marginBottom: 10, backgroundColor: "#fff" },
+  addButton: { flexDirection: "row", backgroundColor: "#0F3E48", borderRadius: 8, padding: 10, justifyContent: "center", alignItems: "center", marginVertical: 5 },
+  addText: { color: "#fff", marginLeft: 5, fontWeight: "600" },
+  availabilityItem: { flexDirection: "row", justifyContent: "space-between", paddingRight: 10, marginTop: 6 },
+  avail: { marginLeft: 10, marginTop: 5, color: "#333" },
+  row: { flexDirection: "row", justifyContent: "space-between", marginTop: 20, marginBottom: 40 },
+  back: { flex: 1, backgroundColor: "#E5E5EA", alignItems: "center", padding: 12, borderRadius: 8, marginRight: 5 },
+  backText: { color: "#333", fontWeight: "600" },
+  next: { flex: 1, backgroundColor: "#0F3E48", alignItems: "center", padding: 12, borderRadius: 8, marginLeft: 5 },
+  nextText: { color: "#fff", fontWeight: "600" }
 });

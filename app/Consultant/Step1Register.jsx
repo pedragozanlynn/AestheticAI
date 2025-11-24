@@ -13,7 +13,8 @@ export default function Step1Register() {
     address: "",
     password: "",
     confirmPassword: "",
-    consultantType: ""
+    consultantType: "",
+    gender: "" 
   });
 
   useEffect(() => {
@@ -33,8 +34,11 @@ export default function Step1Register() {
     init();
   }, []);
 
-  const handleInputChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+  // ⭐ UPDATED — Auto-save on change
+  const handleInputChange = async (field, value) => {
+    const updated = { ...formData, [field]: value };
+    setFormData(updated);
+    await AsyncStorage.setItem("step1Data", JSON.stringify(updated));
   };
 
   const validateForm = () => {
@@ -44,9 +48,10 @@ export default function Step1Register() {
       !formData.address ||
       !formData.password ||
       !formData.confirmPassword ||
-      !formData.consultantType
+      !formData.consultantType ||
+      !formData.gender
     ) {
-      Alert.alert("Missing Field", "Please fill in all fields.");
+      Alert.alert("Missing Field", "Please fill in all fields, including gender.");
       return false;
     }
 
@@ -101,12 +106,31 @@ export default function Step1Register() {
       <Text style={styles.label}>Complete Address</Text>
       <Input value={formData.address} onChangeText={(text) => handleInputChange("address", text)} placeholder="Enter address" />
 
+      {/* ⭐ GENDER */}
+      <Text style={styles.label}>Gender</Text>
+      <View style={styles.row}>
+        <TouchableOpacity 
+          style={[styles.option, formData.gender === "Male" && styles.selected]}
+          onPress={() => handleInputChange("gender", "Male")}
+        >
+          <Text>Male</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.option, formData.gender === "Female" && styles.selected]}
+          onPress={() => handleInputChange("gender", "Female")}
+        >
+          <Text>Female</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* CONSULTANT TYPE */}
       <Text style={styles.label}>Consultant Type</Text>
       <View style={styles.row}>
-        <TouchableOpacity style={[styles.option, formData.consultantType === "Professional" && styles.selected]} onPress={() => handleInputChange("consultantType", "professional")}>
+        <TouchableOpacity style={[styles.option, formData.consultantType === "Professional" && styles.selected]} onPress={() => handleInputChange("consultantType", "Professional")}>
           <Text>Professional</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.option, formData.consultantType === "Fresh Graduate" && styles.selected]} onPress={() => handleInputChange("consultantType", "fresh")}>
+        <TouchableOpacity style={[styles.option, formData.consultantType === "Fresh Graduate" && styles.selected]} onPress={() => handleInputChange("consultantType", "Fresh Graduate")}>
           <Text>Fresh Graduate</Text>
         </TouchableOpacity>
       </View>
@@ -122,7 +146,6 @@ const styles = StyleSheet.create({
   container: { padding: 20, backgroundColor: "#fff", flex: 1 },
   title: { fontSize: 22, fontWeight: "bold", color: "#0F3E48", marginBottom: 15 },
   label: { fontWeight: "600", marginTop: 10, marginBottom: 5, color: "#333" },
-  input: { borderWidth: 1, borderColor: "#ccc", borderRadius: 8, padding: 12, backgroundColor: "#fff" },
   row: { flexDirection: "row", justifyContent: "space-between", marginVertical: 10 },
   option: { flex: 1, borderWidth: 1, borderColor: "#ccc", borderRadius: 8, alignItems: "center", padding: 12, marginHorizontal: 5 },
   selected: { backgroundColor: "#E6F4FE", borderColor: "#0F3E48" },

@@ -1,9 +1,9 @@
-import React, { useState } from "react";
-import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Linking, StyleSheet } from "react-native";
-import { useRouter, useLocalSearchParams } from "expo-router";
-import { auth, db } from "../../config/firebase";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import React, { useState } from "react";
+import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { auth, db } from "../../config/firebase";
 
 export default function Step3Review() {
   const router = useRouter();
@@ -25,6 +25,7 @@ export default function Step3Review() {
         fullName: data.fullName,
         email: data.email,
         address: data.address,
+        gender: data.gender,            // ⭐ ADDED
         consultantType: data.consultantType,
         specialization: step2.specialization,
         education: step2.education,
@@ -34,7 +35,6 @@ export default function Step3Review() {
         portfolioURL: step2.portfolioLink || null,
         submittedAt: serverTimestamp(),
         status: "pending"
-       
       });
 
       Alert.alert("Submitted ✅", "Your registration is pending admin approval.");
@@ -55,6 +55,7 @@ export default function Step3Review() {
       <Text>Full Name: {data.fullName}</Text>
       <Text>Email: {data.email}</Text>
       <Text>Address: {data.address}</Text>
+      <Text>Gender: {data.gender}</Text> 
 
       <Text style={styles.section}>Consultant Details</Text>
       <Text>Type: {data.consultantType}</Text>
