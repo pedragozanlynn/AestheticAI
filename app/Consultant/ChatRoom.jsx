@@ -1,4 +1,6 @@
 // app/(Consultant)/ChatRoom.jsx
+// FINAL WORKING VERSION WITH FILE PREVIEW + SUPABASE UPLOAD + FIREBASE SAVE
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -6,6 +8,7 @@ import {
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   StyleSheet,
   Text,
@@ -22,14 +25,13 @@ import {
   listenToMessages,
   markConsultantChatAsRead,
 } from "../../services/chatService";
-import { sendMessage } from "../../services/messageService";
+import { sendFileMessage, sendMessage } from "../../services/messageService";
+
+import { pickFile, uploadToSupabase } from "../../services/fileUploadService";
 
 export default function ChatRoom() {
-  const {
-    roomId,
-    userId: routeUserId,
-    appointmentId: routeAppointmentId,
-  } = useLocalSearchParams();
+  const { roomId, userId: routeUserId, appointmentId: routeAppointmentId } =
+    useLocalSearchParams();
 
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
@@ -40,16 +42,12 @@ export default function ChatRoom() {
   const flatListRef = useRef();
   const unsubRef = useRef(null);
 
-  // ---------------------------------------------------------
   // LOAD CONSULTANT PROFILE
-  // ---------------------------------------------------------
   useEffect(() => {
     const loadProfile = async () => {
       try {
         const keys = await AsyncStorage.getAllKeys();
-        const profileKey = keys.find((k) =>
-          k.startsWith("aestheticai:user-profile:")
-        );
+        const profileKey = keys.find((k) => k.startsWith("aestheticai:user-profile:"));
         if (!profileKey) return;
 
         const raw = await AsyncStorage.getItem(profileKey);
@@ -63,17 +61,12 @@ export default function ChatRoom() {
         console.log("Error loading consultant profile:", e);
       }
     };
-
     loadProfile();
   }, []);
 
-  // ---------------------------------------------------------
-  // INIT CHAT ROOM
-  // ---------------------------------------------------------
+  // INIT CHATROOM
   useEffect(() => {
     if (!roomId || !consultant?.id) return;
-
-    let mounted = true;
 
     const init = async () => {
       setLoading(true);
@@ -87,7 +80,6 @@ export default function ChatRoom() {
             ? routeAppointmentId
             : null;
 
-        // 1️⃣ CREATE CHATROOM IF NOT EXIST
         if (!snap.exists()) {
           if (!routeUserId) {
             console.warn("ChatRoom missing userId — cannot create room.");
@@ -95,13 +87,7 @@ export default function ChatRoom() {
             return;
           }
 
-          await ensureChatRoom(
-            roomId,
-            routeUserId,
-            consultant.id,
-            appointmentIdToUse
-          );
-
+          await ensureChatRoom(roomId, routeUserId, consultant.id, appointmentIdToUse);
           await new Promise((r) => setTimeout(r, 200));
 
           const checkSnap = await getDoc(roomRef);
@@ -115,7 +101,6 @@ export default function ChatRoom() {
         } else {
           setRoomExists(true);
 
-          // Update appointment if needed
           await ensureChatRoom(
             roomId,
             routeUserId,
@@ -124,7 +109,6 @@ export default function ChatRoom() {
           );
         }
 
-        // 2️⃣ VALIDATE ROOM CONTENT
         const finalSnap = await getDoc(roomRef);
         const data = finalSnap.data();
 
@@ -135,16 +119,11 @@ export default function ChatRoom() {
         }
 
         if (data.consultantId !== consultant.id) {
-          console.warn(
-            "Consultant mismatch:",
-            consultant.id,
-            data.consultantId
-          );
+          console.warn("Consultant mismatch:", consultant.id, data.consultantId);
           setLoading(false);
           return;
         }
 
-        // 3️⃣ START LISTENING
         if (unsubRef.current) {
           try {
             unsubRef.current();
@@ -154,12 +133,9 @@ export default function ChatRoom() {
 
         unsubRef.current = listenToMessages(roomId, (msgs) => {
           setMessages(msgs);
-          setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: true });
-          }, 50);
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
         });
 
-        // 4️⃣ MARK AS READ
         markConsultantChatAsRead(roomId).catch((e) =>
           console.warn("markConsultantChatAsRead error:", e)
         );
@@ -174,7 +150,6 @@ export default function ChatRoom() {
     init();
 
     return () => {
-      mounted = false;
       if (unsubRef.current) {
         try {
           unsubRef.current();
@@ -184,9 +159,7 @@ export default function ChatRoom() {
     };
   }, [roomId, consultant, routeUserId, routeAppointmentId]);
 
-  // ---------------------------------------------------------
-  // SEND MESSAGE
-  // ---------------------------------------------------------
+  // SEND TEXT
   const handleSend = async () => {
     if (!text.trim() || !consultant?.id || !roomExists) return;
 
@@ -209,60 +182,97 @@ export default function ChatRoom() {
     flatListRef.current?.scrollToEnd({ animated: true });
 
     try {
-      const realId = await sendMessage(
-        roomId,
-        consultant.id,
-        "consultant",
-        messageText
-      );
+      const realId = await sendMessage(roomId, consultant.id, "consultant", messageText);
 
       setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === tempId ? { ...msg, id: realId, sending: false } : msg
-        )
+        prev.map((msg) => (msg.id === tempId ? { ...msg, id: realId, sending: false } : msg))
       );
     } catch (err) {
       setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === tempId ? { ...msg, sending: false, failed: true } : msg
-        )
+        prev.map((msg) => (msg.id === tempId ? { ...msg, sending: false, failed: true } : msg))
       );
     }
   };
 
-  // ---------------------------------------------------------
+  // SEND FILE
+  const handleFileSend = async () => {
+    if (!consultant?.id || !roomExists) return;
+
+    const file = await pickFile();
+    if (!file) return;
+
+    const tempId = "temp-file-" + Date.now();
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: tempId,
+        fileName: file.name,
+        fileType: file.mimeType,
+        senderId: consultant.id,
+        senderType: "consultant",
+        type: "file",
+        sending: true,
+      },
+    ]);
+
+    flatListRef.current?.scrollToEnd({ animated: true });
+
+    try {
+      const uploaded = await uploadToSupabase(file);
+      if (!uploaded?.fileUrl) throw new Error("Upload failed: no URL returned");
+
+      const realId = await sendFileMessage(
+        roomId,
+        consultant.id,
+        "consultant",
+        uploaded.fileUrl,
+        uploaded.fileName,
+        uploaded.fileType
+      );
+
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, id: realId, sending: false } : m))
+      );
+    } catch (err) {
+      console.log("❌ file send failed", err);
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, sending: false, failed: true } : m))
+      );
+    }
+  };
+
   // RENDER MESSAGE
-  // ---------------------------------------------------------
   const renderMsg = ({ item }) => {
     const isMe = item.senderType === "consultant";
 
-    return (
-      <View
-        style={[
-          styles.message,
-          isMe ? styles.myMessage : styles.theirMessage,
-        ]}
-      >
-        <Text
-          style={[styles.messageText, !isMe && { color: "#000" }]}
+    if (item.type === "file") {
+      return (
+        <TouchableOpacity
+          style={[styles.message, isMe ? styles.myMessage : styles.theirMessage]}
+          onPress={() => item.fileUrl && Linking.openURL(item.fileUrl)}
         >
-          {item.text}
-        </Text>
+          <Text style={[styles.messageText, !isMe && { color: "#000" }]}>
+            📎 {item.fileName}
+          </Text>
 
-        {isMe && item.sending && (
-          <Text style={{ color: "#ccc", fontSize: 10 }}>sending...</Text>
-        )}
+          {isMe && item.sending && <Text style={styles.pending}>uploading...</Text>}
+          {isMe && item.failed && <Text style={styles.failed}>failed</Text>}
+        </TouchableOpacity>
+      );
+    }
 
-        {isMe && item.failed && (
-          <Text style={{ color: "red", fontSize: 10 }}>failed</Text>
-        )}
+    return (
+      <View style={[styles.message, isMe ? styles.myMessage : styles.theirMessage]}>
+        <Text style={[styles.messageText, !isMe && { color: "#000" }]}>{item.text}</Text>
+
+        {isMe && item.sending && <Text style={styles.pending}>sending...</Text>}
+        {isMe && item.failed && <Text style={styles.failed}>failed</Text>}
       </View>
     );
   };
 
-  // ---------------------------------------------------------
   // UI
-  // ---------------------------------------------------------
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: "#fff" }}
@@ -275,8 +285,7 @@ export default function ChatRoom() {
           <ActivityIndicator size="small" color="#0F3E48" />
         ) : !roomExists ? (
           <Text style={{ padding: 20, color: "#333" }}>
-            Chat room not available. Make sure the appointment is
-            accepted.
+            Chat room not available. Make sure the appointment is accepted.
           </Text>
         ) : (
           <FlatList
@@ -289,17 +298,18 @@ export default function ChatRoom() {
         )}
 
         <View style={styles.inputContainer}>
+          <TouchableOpacity style={styles.attachBtn} onPress={handleFileSend}>
+            <Text style={styles.attachText}>📎</Text>
+          </TouchableOpacity>
+
           <TextInput
             style={styles.input}
             value={text}
             onChangeText={setText}
             placeholder="Type a message..."
           />
-          <TouchableOpacity
-            style={styles.sendBtn}
-            onPress={handleSend}
-            disabled={!roomExists}
-          >
+
+          <TouchableOpacity style={styles.sendBtn} onPress={handleSend} disabled={!roomExists}>
             <Text style={{ color: "#fff", fontWeight: "700" }}>Send</Text>
           </TouchableOpacity>
         </View>
@@ -310,14 +320,12 @@ export default function ChatRoom() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 15, paddingTop: 40 },
-
   header: {
     fontSize: 22,
     fontWeight: "900",
     color: "#0F3E48",
     marginBottom: 15,
   },
-
   message: {
     padding: 10,
     marginVertical: 6,
@@ -326,8 +334,10 @@ const styles = StyleSheet.create({
   },
   myMessage: { alignSelf: "flex-end", backgroundColor: "#0F3E48" },
   theirMessage: { alignSelf: "flex-start", backgroundColor: "#E6E6E6" },
-
   messageText: { color: "#fff" },
+
+  pending: { color: "#ccc", fontSize: 10, marginTop: 3 },
+  failed: { color: "red", fontSize: 10, marginTop: 3 },
 
   inputContainer: {
     position: "absolute",
@@ -340,6 +350,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderColor: "#ccc",
   },
+
+  attachBtn: { justifyContent: "center", marginRight: 10 },
+  attachText: { fontSize: 22 },
 
   input: {
     flex: 1,

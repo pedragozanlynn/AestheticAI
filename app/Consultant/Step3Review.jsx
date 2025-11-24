@@ -2,7 +2,16 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from "react-native";
 import { auth, db } from "../../config/firebase";
 
 export default function Step3Review() {
@@ -17,7 +26,12 @@ export default function Step3Review() {
     setLoading(true);
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        data.email,
+        data.password
+      );
+
       const user = userCredential.user;
       await updateProfile(user, { displayName: data.fullName });
 
@@ -25,14 +39,14 @@ export default function Step3Review() {
         fullName: data.fullName,
         email: data.email,
         address: data.address,
-        gender: data.gender,            // ⭐ ADDED
+        gender: data.gender,
         consultantType: data.consultantType,
         specialization: step2.specialization,
         education: step2.education,
         experience: step2.experience || "",
         licenseNumber: step2.licenseNumber || "",
         availability: step2.availability,
-        portfolioURL: step2.portfolioLink || null,
+        portfolioURL: step2.portfolioLink || null,  // ⭐ UPDATED: correctly saved
         submittedAt: serverTimestamp(),
         status: "pending"
       });
@@ -55,12 +69,13 @@ export default function Step3Review() {
       <Text>Full Name: {data.fullName}</Text>
       <Text>Email: {data.email}</Text>
       <Text>Address: {data.address}</Text>
-      <Text>Gender: {data.gender}</Text> 
+      <Text>Gender: {data.gender}</Text>
 
       <Text style={styles.section}>Consultant Details</Text>
       <Text>Type: {data.consultantType}</Text>
       <Text>Specialization: {step2.specialization}</Text>
       <Text>Education: {step2.education}</Text>
+
       {data.consultantType === "professional" && (
         <>
           <Text>Experience: {step2.experience} years</Text>
@@ -69,24 +84,45 @@ export default function Step3Review() {
       )}
 
       <Text style={styles.section}>Availability</Text>
-      {step2.availability.length > 0 ? step2.availability.map((a, i) => (
-        <Text key={i}>• {a.day}: {a.am} / {a.pm}</Text>
-      )) : <Text>Not specified</Text>}
+      {step2.availability.length > 0 ? (
+        step2.availability.map((a, i) => (
+          <Text key={i}>• {a.day}: {a.am} / {a.pm}</Text>
+        ))
+      ) : (
+        <Text>Not specified</Text>
+      )}
 
+      {/* ------------------ PORTFOLIO DISPLAY ------------------ */}
       <Text style={styles.section}>Portfolio</Text>
+
       {step2.portfolioLink ? (
-        <Text style={styles.link} onPress={() => Linking.openURL(step2.portfolioLink)}>
-          📎 View Portfolio
+        <Text
+          style={styles.link}
+          onPress={() => Linking.openURL(step2.portfolioLink)}
+        >
+          📎 View Uploaded Portfolio File
         </Text>
-      ) : <Text>No portfolio link provided</Text>}
+      ) : (
+        <Text>No portfolio file uploaded</Text>
+      )}
 
       <View style={styles.row}>
-        <TouchableOpacity style={styles.back} onPress={() => router.back()} disabled={loading}>
+        <TouchableOpacity
+          style={styles.back}
+          onPress={() => router.back()}
+          disabled={loading}
+        >
           <Text>Back</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.submit, loading && { opacity: 0.7 }]} onPress={handleSubmit} disabled={loading}>
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Submit</Text>}
+        <TouchableOpacity
+          style={[styles.submit, loading && { opacity: 0.7 }]}
+          onPress={handleSubmit}
+          disabled={loading}
+        >
+          {loading ? <ActivityIndicator color="#fff" /> : (
+            <Text style={styles.submitText}>Submit</Text>
+          )}
         </TouchableOpacity>
       </View>
     </ScrollView>

@@ -1,9 +1,13 @@
-import React, { useState, useEffect, useRef } from "react";
-import { ScrollView, Text, TextInput, TouchableOpacity, Alert, StyleSheet, View } from "react-native";
-import { Picker } from "@react-native-picker/picker";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Picker } from "@react-native-picker/picker";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+
+// 🔥 Your services
+
+import { pickFile, uploadToSupabase } from "../../services/fileUploadService";
 
 // session cache
 let sessionFormData = null;
@@ -24,6 +28,26 @@ export default function Step2Details() {
     am: "",
     pm: ""
   });
+
+  // ------------------------- PORTFOLIO UPLOAD (UPDATED) -------------------------
+  const uploadPortfolio = async () => {
+    try {
+      const picked = await pickFile();
+      if (!picked) return;
+
+      const uploaded = await uploadToSupabase(picked, "portfolio-files");
+      if (!uploaded) {
+        return Alert.alert("Upload Failed", "Could not upload portfolio file.");
+      }
+
+      handleInputChange("portfolioLink", uploaded.fileUrl);
+
+      Alert.alert("Success", "Portfolio uploaded successfully!");
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Error", "Something went wrong while uploading.");
+    }
+  };
 
   // ---------------------- LOAD FROM STORAGE ----------------------
   useEffect(() => {
@@ -83,7 +107,7 @@ export default function Step2Details() {
       const newAvailability = [...prev.availability, { day: prev.day, am: prev.am, pm: prev.pm }];
       const next = { ...prev, availability: newAvailability, day: "", am: "", pm: "" };
       sessionFormData = next;
-      AsyncStorage.setItem("step2Data", JSON.stringify(next)); // AUTO-SAVE
+      AsyncStorage.setItem("step2Data", JSON.stringify(next));
       return next;
     });
   };
@@ -94,7 +118,7 @@ export default function Step2Details() {
       const newAvailability = prev.availability.filter((_, i) => i !== index);
       const next = { ...prev, availability: newAvailability };
       sessionFormData = next;
-      AsyncStorage.setItem("step2Data", JSON.stringify(next)); // AUTO-SAVE
+      AsyncStorage.setItem("step2Data", JSON.stringify(next));
       return next;
     });
   };
@@ -234,13 +258,27 @@ export default function Step2Details() {
         </View>
       ))}
 
-      {/* PORTFOLIO */}
-      <Text style={styles.label}>Portfolio (Google Drive Link)</Text>
+      {/* ---------------- PORTFOLIO UPLOAD ---------------- */}
+      <Text style={styles.label}>Portfolio (Upload File)</Text>
+
+      <TouchableOpacity
+        style={{
+          backgroundColor: "#0F3E48",
+          padding: 12,
+          borderRadius: 8,
+          alignItems: "center",
+          marginBottom: 10,
+        }}
+        onPress={uploadPortfolio}
+      >
+        <Text style={{ color: "#fff", fontWeight: "600" }}>Upload Portfolio</Text>
+      </TouchableOpacity>
+
       <TextInput
         style={styles.input}
-        placeholder="Enter Google Drive link"
+        placeholder="Portfolio file link will appear here"
         value={formData.portfolioLink}
-        onChangeText={(v) => handleInputChange("portfolioLink", v)}
+        editable={false}
       />
 
       {/* BUTTONS */}

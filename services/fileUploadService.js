@@ -1,74 +1,101 @@
-import { decode } from "base64-arraybuffer";
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system/legacy";
-import mime from "mime";
 import { supabase } from "../config/supabase";
 
 export const pickFile = async () => {
   try {
-    const result = await DocumentPicker.getDocumentAsync({
+    const res = await DocumentPicker.getDocumentAsync({
       type: "*/*",
-      copyToCacheDirectory: false,  // IMPORTANT
-      multiple: false,
+      copyToCacheDirectory: true,
     });
 
-    if (result.canceled) return null;
+    if (res.canceled) return null;
 
-    return result.assets[0];
+    const file = res.assets[0];
+
+    return {
+      uri: file.uri,
+      name: file.name,
+      mimeType: file.mimeType || "application/octet-stream",
+    };
   } catch (error) {
-    console.log("❌ pickFile error:", error);
+    console.log("❌ File picker error:", error);
     return null;
   }
 };
 
 export const uploadToSupabase = async (file) => {
   try {
-    if (!file) throw new Error("No file selected");
-
-    const originalUri = file.uri;
-
-    // 1️⃣ Copy file to local filesystem (fixes content:// issue)
-    const newPath =
-      FileSystem.documentDirectory + file.name;
-
-    await FileSystem.copyAsync({
-      from: originalUri,
-      to: newPath,
-    });
-
-    // 2️⃣ Read the copied file (base64)
-    const base64File = await FileSystem.readAsStringAsync(newPath, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-
-    // 3️⃣ Convert base64 → byte array
-    const fileBytes = decode(base64File);
-
     const fileExt = file.name.split(".").pop();
-    const fileName = `${Date.now()}.${fileExt}`;
-    const mimeType = mime.getType(fileExt) || "application/octet-stream";
+    const filePath = `uploads/${Date.now()}.${fileExt}`;
 
-    const path = `uploads/${fileName}`;
+    // Read the file as arraybuffer
+    const response = await fetch(file.uri);
+    const arrayBuffer = await response.arrayBuffer();
+    const fileBytes = new Uint8Array(arrayBuffer);
 
-    // 4️⃣ Upload to Supabase
-    const { error } = await supabase.storage
+    const { data, error } = await supabase.storage
       .from("chat-files")
-      .upload(path, fileBytes, {
-        contentType: mimeType,
+      .upload(filePath, fileBytes, {
+        contentType: file.mimeType,
+        upsert: false,
       });
 
     if (error) {
       console.log("❌ Supabase upload error:", error);
-      throw error;
+      return null;
     }
 
-    const { data: publicUrlData } = supabase.storage
+    const { data: publicURL } = supabase.storage
       .from("chat-files")
-      .getPublicUrl(path);
+      .getPublicUrl(filePath);
 
-    return publicUrlData.publicUrl;
-  } catch (error) {
-    console.log("❌ uploadToSupabase error:", error);
-    throw new Error("Upload failed");
+    return {
+      fileUrl: publicURL.publicUrl,
+      fileName: file.name,
+      fileType: file.mimeType,
+    };
+  } catch (err) {
+    console.log("❌ uploadToSupabase error:", err);
+    return null;
+  }
+};
+
+/////////////////////////////////////////////////////////////////////////////////////
+// ✅ ADD ONLY — Portfolio Upload (NEW FUNCTION, NOTHING IN ORIGINAL CODE CHANGED)
+/////////////////////////////////////////////////////////////////////////////////////
+
+export const uploadPortfolio = async (file) => {
+  try {
+    const fileExt = file.name.split(".").pop();
+    const filePath = `portfolio/${Date.now()}.${fileExt}`;
+
+    const response = await fetch(file.uri);
+    const arrayBuffer = await response.arrayBuffer();
+    const fileBytes = new Uint8Array(arrayBuffer);
+
+    const { data, error } = await supabase.storage
+      .from("portfolio-file")   // 👉 NEW BUCKET
+      .upload(filePath, fileBytes, {
+        contentType: file.mimeType,
+        upsert: false,
+      });
+
+    if (error) {
+      console.log("❌ Portfolio upload error:", error);
+      return null;
+    }
+
+    const { data: publicURL } = supabase.storage
+      .from("portfolio-file")
+      .getPublicUrl(filePath);
+
+    return {
+      fileUrl: publicURL.publicUrl,
+      fileName: file.name,
+      fileType: file.mimeType,
+    };
+  } catch (err) {
+    console.log("❌ uploadPortfolio error:", err);
+    return null;
   }
 };

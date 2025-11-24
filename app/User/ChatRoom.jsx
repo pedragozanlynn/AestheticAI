@@ -30,6 +30,7 @@ export default function ChatRoom() {
   const [user, setUser] = useState(null);
   const [typing, setTyping] = useState(false);
   const flatListRef = useRef(null);
+  
 
   // Load user profile
   useEffect(() => {

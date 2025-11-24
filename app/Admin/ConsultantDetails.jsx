@@ -1,16 +1,16 @@
+import { useLocalSearchParams } from "expo-router";
 import { doc, updateDoc } from "firebase/firestore";
 import React from "react";
 import {
+  Alert,
+  Linking,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  ScrollView,
-  Alert,
-  Linking,
 } from "react-native";
 import { db } from "../../config/firebase";
-import { useLocalSearchParams } from "expo-router";
 
 export default function ConsultantDetails() {
   const params = useLocalSearchParams();
@@ -45,13 +45,14 @@ export default function ConsultantDetails() {
         <Text style={styles.label}>Specialization:</Text>
         <Text>{data.specialization}</Text>
 
-        {data.portfolioURL && (
-          <>
-            <Text style={styles.label}>Portfolio:</Text>
-            <TouchableOpacity onPress={() => Linking.openURL(data.portfolioURL)}>
-              <Text style={styles.link}>Open Portfolio</Text>
-            </TouchableOpacity>
-          </>
+        {/* ---------------- PORTFOLIO FILE ---------------- */}
+        <Text style={styles.label}>Portfolio File:</Text>
+        {data.portfolioURL ? (
+          <TouchableOpacity onPress={() => Linking.openURL(data.portfolioURL)}>
+            <Text style={styles.link}>📁 Open Portfolio File</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={{ color: "red" }}>No portfolio uploaded</Text>
         )}
 
         <Text style={styles.label}>Status:</Text>
@@ -92,7 +93,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   label: { marginTop: 10, fontWeight: "bold", color: "#0F3E48" },
-  link: { color: "#0066cc", textDecorationLine: "underline" },
+  link: { color: "#0066cc", textDecorationLine: "underline", marginTop: 5 },
   status: { fontWeight: "bold", marginTop: 5 },
   buttons: {
     flexDirection: "row",
