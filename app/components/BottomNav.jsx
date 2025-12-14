@@ -2,11 +2,22 @@
 import { Ionicons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
 import React, { useRef } from "react";
-import { Animated, Dimensions, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
+import {
+  Animated,
+  Dimensions,
+  StyleSheet,
+  Text,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native";
 
 const { width } = Dimensions.get("window");
 
-export default function BottomNavbar({ consultationNotifications = 0, role = "user" }) {
+export default function BottomNavbar({
+  consultationNotifications = 0,
+  role = "user",
+  subType = "Free",
+}) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -28,7 +39,7 @@ export default function BottomNavbar({ consultationNotifications = 0, role = "us
     { name: "Homepage", icon: "grid", routePath: "/Consultant/Homepage" },
     { name: "Requests", icon: "people", routePath: "/Consultant/Requests" },
     { name: "My Clients", icon: "chatbubble", routePath: "/Consultant/ChatList" },
-    { name: "Earnings", icon: "wallet", routePath: "/Consultant/Earnings" },
+    { name: "Earnings", icon: "wallet", routePath: "/Consultant/EarningsScreen" },
     { name: "Profile", icon: "person", routePath: "/Consultant/Profile" },
   ];
 
@@ -37,16 +48,17 @@ export default function BottomNavbar({ consultationNotifications = 0, role = "us
   // ---------------------------
   const adminTabs = [
     { name: "Dashboard", icon: "speedometer", routePath: "/Admin/Dashboard" },
-    { name: "Users", icon: "people-circle", routePath: "/Admin/Users" },
+    { name: "Withdrawals", icon: "cash", routePath: "/Admin/Withdrawals" },
     { name: "Consultants", icon: "briefcase", routePath: "/Admin/Consultants" },
-    { name: "Reports", icon: "bar-chart", routePath: "/Admin/Reports" },
-    { name: "Settings", icon: "settings", routePath: "/Admin/Settings" },
+    { name: "Subscription", icon: "wallet", routePath: "/Admin/Subscription" },
+    { name: "Ratings", icon: "star", routePath: "/Admin/Ratings" },
   ];
 
-  // Select tabs based on role
-  const tabs = role === "admin" ? adminTabs : role === "consultant" ? consultantTabs : userTabs;
+  // Select correct tabs
+  const tabs =
+    role === "admin" ? adminTabs : role === "consultant" ? consultantTabs : userTabs;
 
-  // Create animated values for each tab
+  // Create animated values
   const scaleAnim = useRef(tabs.map(() => new Animated.Value(1))).current;
 
   const handlePressIn = (index) => {
@@ -57,13 +69,23 @@ export default function BottomNavbar({ consultationNotifications = 0, role = "us
     }).start();
   };
 
-  const handlePressOut = (index, routePath) => {
+  // =======================================================
+  // 🚨 PREMIUM CHECK FOR CONSULTATION ONLY
+  // =======================================================
+  const handlePressOut = (index, tab) => {
     Animated.spring(scaleAnim[index], {
       toValue: 1,
       friction: 4,
       useNativeDriver: true,
     }).start(() => {
-      router.push(routePath);
+
+      // FREE USER >> Redirect when clicking Consultation
+      if (role === "user" && tab.name === "Consultation" && subType !== "Premium") {
+        return router.push("/User/UpgradeInfo");
+      }
+
+      // Default navigation
+      router.push(tab.routePath);
     });
   };
 
@@ -71,33 +93,43 @@ export default function BottomNavbar({ consultationNotifications = 0, role = "us
     <View style={styles.wrapper}>
       <View style={styles.container}>
         {tabs.map((tab, index) => {
-          // CASE-INSENSITIVE MATCH (fixes your error)
-          const isActive =
-            pathname?.toLowerCase() === tab.routePath?.toLowerCase();
+          const isActive = pathname?.toLowerCase() === tab.routePath?.toLowerCase();
 
           return (
             <TouchableWithoutFeedback
               key={tab.name}
               onPressIn={() => handlePressIn(index)}
-              onPressOut={() => handlePressOut(index, tab.routePath)}
+              onPressOut={() => handlePressOut(index, tab)}
             >
-              <Animated.View style={[styles.tabButton, { transform: [{ scale: scaleAnim[index] }] }]}>
+              <Animated.View
+                style={[
+                  styles.tabButton,
+                  { transform: [{ scale: scaleAnim[index] }] },
+                ]}
+              >
                 <Ionicons
                   name={tab.icon}
                   size={28}
                   color={isActive ? "#008080" : "#0f3e48"}
                 />
 
-                <Text style={[styles.tabText, { color: isActive ? "#008080" : "#0f3e48" }]}>
+                <Text
+                  style={[
+                    styles.tabText,
+                    { color: isActive ? "#008080" : "#0f3e48" },
+                  ]}
+                >
                   {tab.name}
                 </Text>
 
-                {/* Notification Badge for USER only */}
+                {/* Badge for consultation */}
                 {tab.name === "Consultation" &&
                   consultationNotifications > 0 &&
                   role === "user" && (
                     <View style={styles.badge}>
-                      <Text style={styles.badgeText}>{consultationNotifications}</Text>
+                      <Text style={styles.badgeText}>
+                        {consultationNotifications}
+                      </Text>
                     </View>
                   )}
               </Animated.View>

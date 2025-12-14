@@ -1,16 +1,16 @@
-import { useLocalSearchParams } from "expo-router";
 import { doc, updateDoc } from "firebase/firestore";
 import React from "react";
 import {
-  Alert,
-  Linking,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  ScrollView,
+  Alert,
+  Linking,
 } from "react-native";
 import { db } from "../../config/firebase";
+import { useLocalSearchParams } from "expo-router";
 
 export default function ConsultantDetails() {
   const params = useLocalSearchParams();

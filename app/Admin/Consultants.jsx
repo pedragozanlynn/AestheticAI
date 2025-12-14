@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
   ScrollView,
+  Linking
 } from "react-native";
 import { db } from "../../config/firebase";
 import BottomNavbar from "../components/BottomNav";
@@ -55,6 +56,28 @@ export default function Consultantst() {
           <View key={c.id} style={styles.card}>
             <Text style={styles.name}>{c.fullName}</Text>
             <Text style={styles.email}>{c.email}</Text>
+
+            {/* ---------- PORTFOLIO FILE INDICATOR ---------- */}
+            <Text style={{ marginTop: 5 }}>
+              Portfolio:{" "}
+              {c.portfolioURL ? (
+                <Text style={{ color: "green", fontWeight: "600" }}>
+                  Available
+                </Text>
+              ) : (
+                <Text style={{ color: "red" }}>None</Text>
+              )}
+            </Text>
+
+            {/* ---------- VIEW PORTFOLIO BUTTON ---------- */}
+            {c.portfolioURL && (
+              <TouchableOpacity
+                style={styles.portfolioBtn}
+                onPress={() => Linking.openURL(c.portfolioURL)}
+              >
+                <Text style={styles.portfolioText}>VIEW PORTFOLIO FILE</Text>
+              </TouchableOpacity>
+            )}
 
             <Text style={styles.status}>
               Status:{" "}
@@ -112,7 +135,21 @@ const styles = StyleSheet.create({
   },
   name: { fontSize: 18, fontWeight: "bold", color: "#0F3E48" },
   email: { color: "#333", marginBottom: 5 },
-  status: { marginBottom: 10 },
+
+  /* Portfolio button */
+  portfolioBtn: {
+    backgroundColor: "#2176AE",
+    paddingVertical: 8,
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  portfolioText: {
+    textAlign: "center",
+    color: "#fff",
+    fontWeight: "600",
+  },
+
+  status: { marginVertical: 10 },
   viewBtn: {
     backgroundColor: "#0F3E48",
     paddingVertical: 10,

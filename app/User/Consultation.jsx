@@ -1,7 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { collection, getDocs, onSnapshot, query, where } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  onSnapshot,
+  query,
+  where,
+} from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   Image,
@@ -13,35 +19,28 @@ import {
   View,
 } from "react-native";
 import { db } from "../../config/firebase";
+import useSubscriptionType from "../../services/useSubscriptionType";
 import BottomNavbar from "../components/BottomNav";
-
-// ✅ ADD THIS
 import NotificationBell from "../components/NotificationBell";
 
 export default function Consultation() {
   const router = useRouter();
-
   const [showHistory, setShowHistory] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [consultants, setConsultants] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
-
-  // ✅ LOAD LOGGED-IN USER FOR NOTIFICATION BELL
+  const subType = useSubscriptionType();
   const [user, setUser] = useState(null);
 
+  // Load logged-in user for notification bell
   useEffect(() => {
     const loadUser = async () => {
       const keys = await AsyncStorage.getAllKeys();
-      const profileKey = keys.find((k) =>
-        k.startsWith("aestheticai:user-profile:")
-      );
-
+      const profileKey = keys.find(k => k.startsWith("aestheticai:user-profile:"));
       if (!profileKey) return;
-
       const data = await AsyncStorage.getItem(profileKey);
       setUser(JSON.parse(data));
     };
-
     loadUser();
   }, []);
 
@@ -56,95 +55,102 @@ export default function Consultation() {
     "Materials Expert",
   ];
 
-  // ⭐ FETCH ACCEPTED CONSULTANTS + RATINGS
+  // Fetch consultants and ratings summary
   useEffect(() => {
-    const q = query(
-      collection(db, "consultants"),
-      where("status", "==", "accepted")
-    );
+    const fetchConsultantsAndRatings = async () => {
+      // 1️⃣ Fetch accepted consultants
+      const consultantsQuery = query(
+        collection(db, "consultants"),
+        where("status", "==", "accepted")
+      );
+      const consultantsSnap = await getDocs(consultantsQuery);
 
-    const unsub = onSnapshot(q, async (snapshot) => {
-      const list = [];
+      const tempConsultants = consultantsSnap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        averageRating: 0,
+        reviewCount: 0,
+      }));
 
-      for (const docSnap of snapshot.docs) {
-        const data = docSnap.data();
-
-        // ⭐ Fetch subcollection ratings
-        const ratingsRef = collection(db, "consultants", docSnap.id, "ratings");
-        const ratingsSnap = await getDocs(ratingsRef);
-
-        let avgRating = 0;
-        if (!ratingsSnap.empty) {
-          const allRatings = ratingsSnap.docs.map((r) => r.data().rating);
-          avgRating = allRatings.reduce((a, b) => a + b, 0) / allRatings.length;
+      // 2️⃣ Fetch all ratings in one query
+      const ratingsSnap = await getDocs(collection(db, "ratings"));
+      const ratingsByConsultant = {};
+      ratingsSnap.docs.forEach(doc => {
+        const r = doc.data();
+        if (!ratingsByConsultant[r.consultantId]) {
+          ratingsByConsultant[r.consultantId] = [];
         }
+        ratingsByConsultant[r.consultantId].push(r.rating);
+      });
 
-        list.push({
-          id: docSnap.id,
-          ...data,
-          averageRating: avgRating,
+      // 3️⃣ Merge ratings summary into consultants
+      const consultantsWithRatings = tempConsultants.map(c => {
+        const ratings = ratingsByConsultant[c.id] || [];
+        const count = ratings.length;
+        const avg = count > 0 ? ratings.reduce((a, b) => a + b, 0) / count : 0;
+        return { ...c, reviewCount: count, averageRating: avg };
+      });
+
+      setConsultants(consultantsWithRatings);
+
+      // 4️⃣ Optional: Listen for real-time rating updates
+      const unsubscribeRatings = onSnapshot(collection(db, "ratings"), snapshot => {
+        const updatedRatings = {};
+        snapshot.docs.forEach(doc => {
+          const r = doc.data();
+          if (!updatedRatings[r.consultantId]) updatedRatings[r.consultantId] = [];
+          updatedRatings[r.consultantId].push(r.rating);
         });
-      }
 
-      setConsultants(list);
-    });
+        setConsultants(prev =>
+          prev.map(c => {
+            const ratings = updatedRatings[c.id] || [];
+            const count = ratings.length;
+            const avg = count > 0 ? ratings.reduce((a, b) => a + b, 0) / count : 0;
+            return { ...c, reviewCount: count, averageRating: avg };
+          })
+        );
+      });
 
-    return () => unsub();
+      return unsubscribeRatings;
+    };
+
+    const unsubPromise = fetchConsultantsAndRatings();
+    return () => {
+      unsubPromise.then(unsub => unsub && unsub());
+    };
   }, []);
 
-  // 🔎 Filtering
   const filteredConsultants = consultants
-    .filter((c) =>
-      selectedCategory === "All" ? true : c.consultantType === selectedCategory
-    )
-    .filter((c) =>
-      c.fullName.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-  const startChat = (id) => {
-    router.push(`/User/ConsultationChat?consultantId=${id}&chatId=new`);
-  };
+    .filter(c => selectedCategory === "All" || c.consultantType === selectedCategory)
+    .filter(c => c.fullName.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <View style={styles.page}>
+      {/* HEADER */}
       <View style={styles.headerRow}>
-        <Text style={styles.title}>
-          {showHistory ? "Chat History" : "Consultants"}
-        </Text>
-
-        {/* UPDATED ICONS */}
+        <Text style={styles.title}>{showHistory ? "Chat History" : "Consultants"}</Text>
         <View style={{ flexDirection: "row", alignItems: "center" }}>
           <NotificationBell
             userId={user?.uid}
             onPress={() => router.push("/User/NotificationList")}
           />
-
-<TouchableOpacity
-  onPress={() => router.push("/User/ChatList")}
-  style={styles.iconButton}
->
-  <Ionicons
-    name="chatbubble-ellipses-outline"
-    size={26}
-    color="#0F3E48"
-  />
-</TouchableOpacity>
-
-
-          {/* ✔ PEOPLE ICON → ALWAYS GO BACK TO CONSULTANTS */}
+          <TouchableOpacity
+            onPress={() => router.push("/User/ChatList")}
+            style={styles.iconButton}
+          >
+            <Ionicons name="chatbubble-ellipses-outline" size={26} color="#0F3E48" />
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setShowHistory(false)}
             style={[styles.iconButton, { marginLeft: 8 }]}
           >
-            <Ionicons
-              name="people-outline"
-              size={26}
-              color="#0F3E48"
-            />
+            <Ionicons name="people-outline" size={26} color="#0F3E48" />
           </TouchableOpacity>
         </View>
       </View>
 
+      {/* SEARCH */}
       {!showHistory && (
         <View style={styles.searchContainer}>
           <Ionicons name="search-outline" size={20} color="#AAA" />
@@ -157,6 +163,7 @@ export default function Consultation() {
         </View>
       )}
 
+      {/* CATEGORY FILTER */}
       {!showHistory && (
         <ScrollView
           horizontal
@@ -164,18 +171,15 @@ export default function Consultation() {
           style={styles.filterContainer}
           contentContainerStyle={{ alignItems: "center" }}
         >
-          {categories.map((cat) => {
+          {categories.map(cat => {
             const active = selectedCategory === cat;
-
             return (
               <TouchableOpacity
                 key={cat}
                 onPress={() => setSelectedCategory(cat)}
                 style={[styles.filterChip, active && styles.filterChipActive]}
               >
-                <Text
-                  style={[styles.filterText, active && styles.filterTextActive]}
-                >
+                <Text style={[styles.filterText, active && styles.filterTextActive]}>
                   {cat}
                 </Text>
               </TouchableOpacity>
@@ -184,19 +188,17 @@ export default function Consultation() {
         </ScrollView>
       )}
 
+      {/* CONSULTANTS LIST */}
       <ScrollView showsVerticalScrollIndicator={false} style={{ marginBottom: 70 }}>
         {!showHistory && (
           <>
             <Text style={styles.subTitle}>Available Consultants</Text>
-
             {filteredConsultants.length > 0 ? (
-              filteredConsultants.map((c) => (
+              filteredConsultants.map(c => (
                 <TouchableOpacity
                   key={c.id}
                   style={styles.consultantCard}
-                  onPress={() =>
-                    router.push(`/User/ConsultantProfile?consultantId=${c.id}`)
-                  }
+                  onPress={() => router.push(`/User/ConsultantProfile?consultantId=${c.id}`)}
                 >
                   <Image
                     source={
@@ -208,30 +210,27 @@ export default function Consultation() {
                     }
                     style={styles.avatar}
                   />
-
                   <View style={{ flex: 1, marginLeft: 15 }}>
                     <Text style={styles.consultantName}>{c.fullName}</Text>
-                    <Text style={styles.consultantTitle}>
-                      {c.consultantType}
-                    </Text>
-                    <Text style={styles.consultantBio}>
-                      {c.specialization || "No specialization"}
-                    </Text>
+                    <Text style={styles.consultantTitle}>{c.consultantType}</Text>
+                    <Text style={styles.consultantBio}>{c.specialization || "No specialization"}</Text>
 
-                    {/* ⭐ Rating Stars */}
-                    <View style={{ flexDirection: "row", marginTop: 6 }}>
-                      {[1, 2, 3, 4, 5].map((i) => (
+                    {/* ⭐ Average Rating + Numeric + Review Count */}
+                    <View style={{ flexDirection: "row", marginTop: 6, alignItems: "center" }}>
+                      {[1, 2, 3, 4, 5].map(i => (
                         <Ionicons
                           key={i}
-                          name={i <= Math.round(c.averageRating) ? "star" : "star-outline"}
+                          name={i <= Math.floor(c.averageRating) ? "star" : "star-outline"}
                           size={16}
                           color="#FFD700"
                           style={{ marginRight: 2 }}
                         />
                       ))}
+                      <Text style={{ marginLeft: 6, fontSize: 12, color: "#555" }}>
+                        ({c.averageRating.toFixed(1)} / {c.reviewCount} reviews)
+                      </Text>
                     </View>
                   </View>
-
                   <Ionicons name="chatbubble-outline" size={24} color="#0F3E48" />
                 </TouchableOpacity>
               ))
@@ -242,134 +241,28 @@ export default function Consultation() {
         )}
       </ScrollView>
 
-      <BottomNavbar consultationNotifications={0} />
+      <BottomNavbar subType={subType} />
     </View>
   );
 }
 
-// KEEP YOUR STYLES BELOW
 const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: "#F3F9FA",
-    paddingTop: 50,
-    paddingHorizontal: 15,
-  },
-
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 15,
-  },
-
-  title: {
-    fontSize: 26,
-    fontWeight: "700",
-    color: "#0F3E48",
-  },
-
-  iconButton: {
-    padding: 6,
-    borderRadius: 50,
-    backgroundColor: "#FFF",
-    elevation: 3,
-  },
-
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    marginBottom: 10,
-    height: 45,
-    elevation: 2,
-  },
-
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
-    color: "#0F3E48",
-  },
-
-  filterContainer: {
-    flexDirection: "row",
-    backgroundColor: "#E8EEF0",
-    borderRadius: 12,
-    padding: 5,
-    marginBottom: 15,
-  },
-
-  filterChip: {
-    width: 130,
-    height: 36,
-    borderRadius: 10,
-    marginRight: 6,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#E5E5EA",
-  },
-
-  filterChipActive: {
-    backgroundColor: "#0F3E48",
-  },
-
-  filterText: {
-    fontSize: 14,
-    color: "#333",
-  },
-
-  filterTextActive: {
-    color: "#FFFFFF",
-  },
-
-  subTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#0F3E48",
-    marginVertical: 10,
-  },
-
-  consultantCard: {
-    flexDirection: "row",
-    backgroundColor: "#FFF",
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
-    elevation: 2,
-    alignItems: "center",
-  },
-
-  avatar: {
-    width: 70,
-    height: 70,
-    borderRadius: 30,
-  },
-
-  consultantName: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#0F3E48",
-  },
-
-  consultantTitle: {
-    fontSize: 13,
-    color: "#4A6B70",
-    marginTop: 2,
-  },
-
-  consultantBio: {
-    fontSize: 12,
-    color: "#777",
-    marginTop: 2,
-  },
-
-  noResults: {
-    color: "#AAA",
-    marginTop: 15,
-    textAlign: "center",
-    fontStyle: "italic",
-  },
+  page: { flex: 1, backgroundColor: "#F3F9FA", paddingTop: 50, paddingHorizontal: 15 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 15 },
+  title: { fontSize: 26, fontWeight: "700", color: "#0F3E48" },
+  iconButton: { padding: 6, borderRadius: 50, backgroundColor: "#FFF", elevation: 3 },
+  searchContainer: { flexDirection: "row", alignItems: "center", backgroundColor: "#FFF", borderRadius: 12, paddingHorizontal: 10, marginBottom: 10, height: 45, elevation: 2 },
+  searchInput: { flex: 1, marginLeft: 8, fontSize: 16, color: "#0F3E48" },
+  filterContainer: { flexDirection: "row", backgroundColor: "#E8EEF0", borderRadius: 12, padding: 5, marginBottom: 15 },
+  filterChip: { width: 130, height: 36, borderRadius: 10, marginRight: 6, justifyContent: "center", alignItems: "center", backgroundColor: "#E5E5EA" },
+  filterChipActive: { backgroundColor: "#0F3E48" },
+  filterText: { fontSize: 14, color: "#333" },
+  filterTextActive: { color: "#FFFFFF" },
+  subTitle: { fontSize: 18, fontWeight: "600", color: "#0F3E48", marginVertical: 10 },
+  consultantCard: { flexDirection: "row", backgroundColor: "#FFF", borderRadius: 14, padding: 12, marginBottom: 12, elevation: 2, alignItems: "center" },
+  avatar: { width: 70, height: 70, borderRadius: 30 },
+  consultantName: { fontSize: 17, fontWeight: "700", color: "#0F3E48" },
+  consultantTitle: { fontSize: 13, color: "#4A6B70", marginTop: 2 },
+  consultantBio: { fontSize: 12, color: "#777", marginTop: 2 },
+  noResults: { color: "#AAA", marginTop: 15, textAlign: "center", fontStyle: "italic" },
 });

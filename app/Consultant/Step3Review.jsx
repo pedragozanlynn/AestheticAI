@@ -46,7 +46,10 @@ export default function Step3Review() {
         experience: step2.experience || "",
         licenseNumber: step2.licenseNumber || "",
         availability: step2.availability,
-        portfolioURL: step2.portfolioLink || null,  // ⭐ UPDATED: correctly saved
+
+        // ⭐ Correctly save portfolio URL from Step 2
+        portfolioURL: step2.portfolioLink || null,
+
         submittedAt: serverTimestamp(),
         status: "pending"
       });
@@ -92,7 +95,7 @@ export default function Step3Review() {
         <Text>Not specified</Text>
       )}
 
-      {/* ------------------ PORTFOLIO DISPLAY ------------------ */}
+      {/* ⭐ PORTFOLIO DISPLAY UPDATED */}
       <Text style={styles.section}>Portfolio</Text>
 
       {step2.portfolioLink ? (

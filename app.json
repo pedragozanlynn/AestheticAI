@@ -1,55 +1,44 @@
 {
   "expo": {
-    "name": "",
+    "name": "AestheticAI",
     "slug": "frontend",
-    "owner": "nlynn",
+    "owner": "nllynnn",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "aestheticai",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-
     "splash": {
-      "image": "./assets/icon.png",
+      "image": "./assets/splash-image.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F0E7FF"
     },
-
     "ios": {
       "supportsTablet": true,
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F0E7FF"
     },
-
     "android": {
       "package": "com.pedragozanlynn.aestheticai",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "backgroundColor": "#ffffff",
+      "icon": "./assets/icon.png",
       "edgeToEdgeEnabled": true
     },
-
     "web": {
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/icon.png",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F0E7FF"
     },
-
     "plugins": [
       "expo-router"
     ],
-
     "experiments": {
       "typedRoutes": true
     },
-
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "e89ace7f-6ec4-477a-a20f-9ff3eb23cd0e"
+        "projectId": "378347b9-d92e-49b4-8e56-824914724190"
       }
     }
   }

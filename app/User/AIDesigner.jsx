@@ -1,20 +1,24 @@
 // app/user/AIDesigner.jsx
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import React, { useState } from "react";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import useSubscriptionType from "../../services/useSubscriptionType";
 import BottomNavbar from "../components/BottomNav";
+
 
 export default function AIDesigner() {
   const router = useRouter();
+  const subType = useSubscriptionType();
+
 
   // Mock chat summaries for history
   const [chatSummaries, setChatSummaries] = useState({
@@ -88,8 +92,8 @@ export default function AIDesigner() {
       </KeyboardAvoidingView>
 
       {/* Bottom Navbar */}
-      <BottomNavbar consultationNotifications={2} />
-    </View>
+      <BottomNavbar subType={subType} />
+      </View>
   );
 }
 

@@ -1,33 +1,32 @@
 // app/(Consultant)/ChatRoom.jsx
-// FINAL WORKING VERSION WITH FILE PREVIEW + SUPABASE UPLOAD + FIREBASE SAVE
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
-  Linking,
+  Modal,
   Platform,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
-import { doc, getDoc } from "firebase/firestore";
+import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../../config/firebase";
-
 import {
   ensureChatRoom,
   listenToMessages,
   markConsultantChatAsRead,
 } from "../../services/chatService";
-import { sendFileMessage, sendMessage } from "../../services/messageService";
-
-import { pickFile, uploadToSupabase } from "../../services/fileUploadService";
+import { pickFile } from "../../services/fileUploadService";
+import { handleUnsendMessage } from "../../services/handleUnsendMessage";
+import { useSendMessage } from "../../services/useSendMessage";
 
 export default function ChatRoom() {
   const { roomId, userId: routeUserId, appointmentId: routeAppointmentId } =
@@ -39,15 +38,21 @@ export default function ChatRoom() {
   const [loading, setLoading] = useState(true);
   const [roomExists, setRoomExists] = useState(false);
 
+  // --- Image Modal State ---
+  const [imageModalVisible, setImageModalVisible] = useState(false);
+  const [modalImageUri, setModalImageUri] = useState(null);
+
   const flatListRef = useRef();
   const unsubRef = useRef(null);
 
-  // LOAD CONSULTANT PROFILE
+  // Load consultant profile
   useEffect(() => {
     const loadProfile = async () => {
       try {
         const keys = await AsyncStorage.getAllKeys();
-        const profileKey = keys.find((k) => k.startsWith("aestheticai:user-profile:"));
+        const profileKey = keys.find((k) =>
+          k.startsWith("aestheticai:user-profile:")
+        );
         if (!profileKey) return;
 
         const raw = await AsyncStorage.getItem(profileKey);
@@ -64,7 +69,7 @@ export default function ChatRoom() {
     loadProfile();
   }, []);
 
-  // INIT CHATROOM
+  // Initialize chat room
   useEffect(() => {
     if (!roomId || !consultant?.id) return;
 
@@ -72,74 +77,34 @@ export default function ChatRoom() {
       setLoading(true);
 
       try {
-        const roomRef = doc(db, "chatRooms", roomId);
-        const snap = await getDoc(roomRef);
+        if (!routeUserId) {
+          console.warn("ChatRoom missing userId — cannot create room.");
+          setLoading(false);
+          return;
+        }
 
-        const appointmentIdToUse =
+        await ensureChatRoom(
+          roomId,
+          routeUserId,
+          consultant.id,
           routeAppointmentId && routeAppointmentId !== "null"
             ? routeAppointmentId
-            : null;
-
-        if (!snap.exists()) {
-          if (!routeUserId) {
-            console.warn("ChatRoom missing userId — cannot create room.");
-            setLoading(false);
-            return;
-          }
-
-          await ensureChatRoom(roomId, routeUserId, consultant.id, appointmentIdToUse);
-          await new Promise((r) => setTimeout(r, 200));
-
-          const checkSnap = await getDoc(roomRef);
-          if (!checkSnap.exists()) {
-            console.error("Failed to create chat room.");
-            setLoading(false);
-            return;
-          }
-
-          setRoomExists(true);
-        } else {
-          setRoomExists(true);
-
-          await ensureChatRoom(
-            roomId,
-            routeUserId,
-            consultant.id,
-            appointmentIdToUse
-          );
-        }
-
-        const finalSnap = await getDoc(roomRef);
-        const data = finalSnap.data();
-
-        if (!data.userId || !data.consultantId) {
-          console.warn("Invalid chatRoom fields:", data);
-          setLoading(false);
-          return;
-        }
-
-        if (data.consultantId !== consultant.id) {
-          console.warn("Consultant mismatch:", consultant.id, data.consultantId);
-          setLoading(false);
-          return;
-        }
-
-        if (unsubRef.current) {
-          try {
-            unsubRef.current();
-          } catch {}
-          unsubRef.current = null;
-        }
+            : null
+        );
 
         unsubRef.current = listenToMessages(roomId, (msgs) => {
           setMessages(msgs);
-          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+          setTimeout(
+            () => flatListRef.current?.scrollToEnd({ animated: true }),
+            50
+          );
         });
 
         markConsultantChatAsRead(roomId).catch((e) =>
           console.warn("markConsultantChatAsRead error:", e)
         );
 
+        setRoomExists(true);
         setLoading(false);
       } catch (err) {
         console.error("ChatRoom init error:", err);
@@ -159,120 +124,117 @@ export default function ChatRoom() {
     };
   }, [roomId, consultant, routeUserId, routeAppointmentId]);
 
-  // SEND TEXT
-  const handleSend = async () => {
-    if (!text.trim() || !consultant?.id || !roomExists) return;
+  // --- Integrate useSendMessage hook ---
+  const { sendTextMessage, sendFileMessage } = useSendMessage({
+    roomId,
+    senderId: consultant?.id,
+    senderType: "consultant",
+    setMessages,
+  });
 
-    const messageText = text.trim();
-    setText("");
-
-    const tempId = "temp-" + Date.now();
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: tempId,
-        text: messageText,
-        senderId: consultant.id,
-        senderType: "consultant",
-        sending: true,
-      },
-    ]);
-
-    flatListRef.current?.scrollToEnd({ animated: true });
+  // MARK AS COMPLETE
+  const handleMarkComplete = async () => {
+    if (!roomId || !consultant?.id) return;
 
     try {
-      const realId = await sendMessage(roomId, consultant.id, "consultant", messageText);
-
-      setMessages((prev) =>
-        prev.map((msg) => (msg.id === tempId ? { ...msg, id: realId, sending: false } : msg))
-      );
+      const roomRef = doc(db, "chatRooms", roomId);
+      await updateDoc(roomRef, {
+        status: "completed",
+        completedAt: new Date(),
+      });
+      Alert.alert("Success", "This chat has been marked as complete.");
     } catch (err) {
-      setMessages((prev) =>
-        prev.map((msg) => (msg.id === tempId ? { ...msg, sending: false, failed: true } : msg))
-      );
+      console.error("Error marking complete:", err);
+      Alert.alert("Error", "Failed to mark chat as complete.");
     }
   };
 
-  // SEND FILE
-  const handleFileSend = async () => {
-    if (!consultant?.id || !roomExists) return;
+  // HANDLERS
+  const handleSend = async () => {
+    if (!text.trim()) return;
+    await sendTextMessage(text.trim());
+    setText("");
+  };
 
+  const handleFileSend = async () => {
     const file = await pickFile();
     if (!file) return;
+    await sendFileMessage(file);
+  };
 
-    const tempId = "temp-file-" + Date.now();
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: tempId,
-        fileName: file.name,
-        fileType: file.mimeType,
-        senderId: consultant.id,
-        senderType: "consultant",
-        type: "file",
-        sending: true,
-      },
-    ]);
-
-    flatListRef.current?.scrollToEnd({ animated: true });
-
-    try {
-      const uploaded = await uploadToSupabase(file);
-      if (!uploaded?.fileUrl) throw new Error("Upload failed: no URL returned");
-
-      const realId = await sendFileMessage(
-        roomId,
-        consultant.id,
-        "consultant",
-        uploaded.fileUrl,
-        uploaded.fileName,
-        uploaded.fileType
-      );
-
-      setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? { ...m, id: realId, sending: false } : m))
-      );
-    } catch (err) {
-      console.log("❌ file send failed", err);
-      setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? { ...m, sending: false, failed: true } : m))
-      );
-    }
+  const handleUnsend = async (msg) => {
+    await handleUnsendMessage(msg, roomId, consultant.id, setMessages);
   };
 
   // RENDER MESSAGE
   const renderMsg = ({ item }) => {
     const isMe = item.senderType === "consultant";
 
+    const Wrapper = ({ children }) => (
+      <TouchableOpacity
+        style={[styles.message, isMe ? styles.myMessage : styles.theirMessage]}
+        onLongPress={() => isMe && !item.unsent && handleUnsend(item)}
+      >
+        {children}
+      </TouchableOpacity>
+    );
+
+    if (item.unsent) {
+      return (
+        <Wrapper>
+          <Text style={[styles.messageText, styles.unsent, { color: "#999" }]}>
+            🚫 Message unsent
+          </Text>
+        </Wrapper>
+      );
+    }
+
+    if (item.type === "image" && (item.fileUrl || item.localUri)) {
+      const imageUri = item.fileUrl || item.localUri;
+      return (
+        <Wrapper>
+          <TouchableOpacity
+            onPress={() => {
+              setModalImageUri(imageUri);
+              setImageModalVisible(true);
+            }}
+          >
+            <Image
+              source={{ uri: imageUri }}
+              style={styles.image}
+              resizeMode="cover"
+            />
+          </TouchableOpacity>
+          <Text style={{ marginTop: 5, color: isMe ? "#fff" : "#000", fontSize: 12 }}>
+            {item.fileName}
+          </Text>
+          {isMe && item.failed && <Text style={styles.failed}>failed</Text>}
+          {isMe && item.sending && <Text style={styles.pending}>uploading...</Text>}
+        </Wrapper>
+      );
+    }
+
     if (item.type === "file") {
       return (
-        <TouchableOpacity
-          style={[styles.message, isMe ? styles.myMessage : styles.theirMessage]}
-          onPress={() => item.fileUrl && Linking.openURL(item.fileUrl)}
-        >
-          <Text style={[styles.messageText, !isMe && { color: "#000" }]}>
-            📎 {item.fileName}
+        <Wrapper>
+          <Text style={[styles.messageText, { color: isMe ? "#fff" : "#000" }]}>
+            📄 {item.fileName}
           </Text>
-
-          {isMe && item.sending && <Text style={styles.pending}>uploading...</Text>}
           {isMe && item.failed && <Text style={styles.failed}>failed</Text>}
-        </TouchableOpacity>
+          {isMe && item.sending && <Text style={styles.pending}>uploading...</Text>}
+        </Wrapper>
       );
     }
 
     return (
-      <View style={[styles.message, isMe ? styles.myMessage : styles.theirMessage]}>
-        <Text style={[styles.messageText, !isMe && { color: "#000" }]}>{item.text}</Text>
-
-        {isMe && item.sending && <Text style={styles.pending}>sending...</Text>}
+      <Wrapper>
+        <Text style={[styles.messageText, { color: isMe ? "#fff" : "#000" }]}>{item.text}</Text>
         {isMe && item.failed && <Text style={styles.failed}>failed</Text>}
-      </View>
+        {isMe && item.sending && <Text style={styles.pending}>sending...</Text>}
+      </Wrapper>
     );
   };
 
-  // UI
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: "#fff" }}
@@ -293,7 +255,7 @@ export default function ChatRoom() {
             data={messages}
             renderItem={renderMsg}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={{ paddingBottom: 100 }}
+            contentContainerStyle={{ paddingBottom: 160 }}
           />
         )}
 
@@ -309,36 +271,67 @@ export default function ChatRoom() {
             placeholder="Type a message..."
           />
 
-          <TouchableOpacity style={styles.sendBtn} onPress={handleSend} disabled={!roomExists}>
+          <TouchableOpacity
+            style={styles.sendBtn}
+            onPress={handleSend}
+            disabled={!roomExists}
+          >
             <Text style={{ color: "#fff", fontWeight: "700" }}>Send</Text>
           </TouchableOpacity>
         </View>
+
+        {roomExists && (
+          <TouchableOpacity
+            style={styles.completeOutlineBtn}
+            onPress={handleMarkComplete}
+          >
+            <Text style={styles.completeOutlineText}>Mark as Complete</Text>
+          </TouchableOpacity>
+        )}
       </View>
+
+      {/* --- Image Modal --- */}
+      <Modal
+        visible={imageModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setImageModalVisible(false)}
+      >
+        <View style={styles.modalBackground}>
+          {modalImageUri ? (
+            <Image source={{ uri: modalImageUri }} style={styles.modalImage} resizeMode="contain" />
+          ) : (
+            <ActivityIndicator size="large" color="#fff" />
+          )}
+          <TouchableOpacity
+            style={{
+              position: "absolute",
+              top: 40,
+              right: 20,
+              padding: 10,
+              backgroundColor: "rgba(255,255,255,0.3)",
+              borderRadius: 20,
+            }}
+            onPress={() => setImageModalVisible(false)}
+          >
+            <Text style={{ color: "#fff", fontWeight: "bold" }}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 15, paddingTop: 40 },
-  header: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: "#0F3E48",
-    marginBottom: 15,
-  },
-  message: {
-    padding: 10,
-    marginVertical: 6,
-    maxWidth: "75%",
-    borderRadius: 10,
-  },
+  header: { fontSize: 22, fontWeight: "900", color: "#0F3E48", marginBottom: 15 },
+  message: { padding: 10, marginVertical: 6, maxWidth: "75%", borderRadius: 10 },
   myMessage: { alignSelf: "flex-end", backgroundColor: "#0F3E48" },
   theirMessage: { alignSelf: "flex-start", backgroundColor: "#E6E6E6" },
   messageText: { color: "#fff" },
-
   pending: { color: "#ccc", fontSize: 10, marginTop: 3 },
   failed: { color: "red", fontSize: 10, marginTop: 3 },
-
+  unsent: { color: "#999", fontSize: 10, marginTop: 3, fontStyle: "italic" },
   inputContainer: {
     position: "absolute",
     bottom: 0,
@@ -350,22 +343,22 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderColor: "#ccc",
   },
-
   attachBtn: { justifyContent: "center", marginRight: 10 },
   attachText: { fontSize: 22 },
-
-  input: {
-    flex: 1,
-    padding: 10,
-    backgroundColor: "#F5F5F5",
-    borderRadius: 10,
+  input: { flex: 1, padding: 10, backgroundColor: "#F5F5F5", borderRadius: 10 },
+  sendBtn: { marginLeft: 10, backgroundColor: "#0F3E48", paddingVertical: 10, paddingHorizontal: 15, borderRadius: 10 },
+  completeOutlineBtn: {
+    borderWidth: 1.5,
+    borderColor: "#2ecc71",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignSelf: "flex-start",
+    marginBottom: 58,
   },
-
-  sendBtn: {
-    marginLeft: 10,
-    backgroundColor: "#0F3E48",
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 10,
-  },
+  completeOutlineText: { color: "#2ecc71", fontSize: 14, fontWeight: "700" },
+  // --- Image modal styles ---
+  image: { width: 150, height: 150, borderRadius: 10 },
+  modalBackground: { flex: 1, backgroundColor: "rgba(0,0,0,0.9)", justifyContent: "center", alignItems: "center" },
+  modalImage: { width: "90%", height: "80%" },
 });
