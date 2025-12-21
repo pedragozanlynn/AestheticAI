@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import {
@@ -17,7 +18,6 @@ import PaymentModal from "../components/PaymentModal";
 
 export default function ChatList() {
   const [rooms, setRooms] = useState([]);
-  const [activeTab, setActiveTab] = useState("approved");
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [currentPaymentData, setCurrentPaymentData] = useState(null);
   const router = useRouter();
@@ -76,7 +76,6 @@ export default function ChatList() {
     }
   };
 
-  // --- Chat Unlock Logic ---
   const openChatWithPaymentCheck = async (room) => {
     const hasPaid = await checkPayment(room);
 
@@ -140,7 +139,6 @@ export default function ChatList() {
           rawRooms.map(async (room) => {
             const consultantName = await fetchConsultantInfo(room.consultantId);
 
-            // Get latest appointment
             let appointmentData = { date: null, time: null, status: "pending", notes: "", appointmentId: null };
             const apptQuery = query(
               collection(db, "appointments"),
@@ -168,62 +166,29 @@ export default function ChatList() {
         setRooms(roomsWithData);
       });
 
-      // --- Load pending appointments ---
-      const apptQuery = query(collection(db, "appointments"), where("userId", "==", userId));
-      const unsubAppt = onSnapshot(apptQuery, (snapshot) => {
-        const pendingAppointments = snapshot.docs
-          .map((doc) => ({ id: doc.id, ...doc.data() }))
-          .filter((app) => app.status === "pending");
-
-        const pendingRooms = pendingAppointments.map((app) => ({
-          id: `pending-${app.consultantId}-${app.id}`,
-          consultantId: app.consultantId,
-          consultantName: "Pending Consultant",
-          lastMessage: `${app.date} @ ${app.time}`,
-          unreadForUser: true,
-          pending: true,
-          notes: app.notes || "",
-          appointmentId: app.id,
-          date: app.date,
-          time: app.time,
-          status: app.status,
-          createdAt: app.createdAt,
-          userId: app.userId,
-        }));
-
-        setRooms((prev) => [...pendingRooms, ...prev.filter((r) => !r.pending)]);
-      });
-
-      return () => {
-        unsubChat();
-        unsubAppt();
-      };
+      return () => unsubChat();
     };
 
     loadChatRooms();
   }, []);
 
-  // --- Filter rooms for tabs ---
-  const filteredRooms = rooms
-    .filter((r) => (activeTab === "approved" ? !r.pending : r.pending))
-    .reduce((acc, room) => {
-      const key = room.consultantId;
-      const roomCreatedAt = room.createdAt?.toMillis?.() || 0;
-      const existingCreatedAt = acc[key]?.createdAt?.toMillis?.() || 0;
-      if (!acc[key] || roomCreatedAt > existingCreatedAt) acc[key] = room;
-      return acc;
-    }, {});
+  const filteredRooms = rooms.reduce((acc, room) => {
+    const key = room.consultantId;
+    const roomCreatedAt = room.createdAt?.toMillis?.() || 0;
+    const existingCreatedAt = acc[key]?.createdAt?.toMillis?.() || 0;
+    if (!acc[key] || roomCreatedAt > existingCreatedAt) acc[key] = room;
+    return acc;
+  }, {});
 
   const roomList = Object.values(filteredRooms);
 
   return (
     <View style={styles.container}>
-      <View style={styles.tabContainer}>
-        <TouchableOpacity onPress={() => setActiveTab("approved")}>
-          <Text style={[styles.tabText, activeTab === "approved" && styles.activeTab]}>Chats</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setActiveTab("pending")}>
-          <Text style={[styles.tabText, activeTab === "pending" && styles.activeTab]}>Pending</Text>
+      {/* HEADER */}
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>Messages</Text>
+        <TouchableOpacity onPress={() => router.push("/User/Consultants")} style={styles.iconButton}>
+          <Ionicons name="people" size={28} color="#0F3E48" />
         </TouchableOpacity>
       </View>
 
@@ -231,20 +196,13 @@ export default function ChatList() {
         data={roomList}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => {
-          const active = !item.pending && item.status === "accepted" && isAppointmentActive(item.date, item.time);
-
-          if (item.pending) {
-            return (
-              <View style={[styles.roomItem, styles.pendingRoom]}>
-                <Text style={styles.consultantName}>{item.consultantName}</Text>
-                <Text style={styles.lastMessage}>{item.lastMessage || "No messages yet"}</Text>
-                <Text style={styles.pendingText}>⏳ Pending consultation (waiting for admin approval)</Text>
-              </View>
-            );
-          }
+          const active = item.status === "accepted" && isAppointmentActive(item.date, item.time);
 
           return (
-            <TouchableOpacity style={[styles.roomItem, item.unreadForUser && styles.unreadRoom]} onPress={() => openChatWithPaymentCheck(item)}>
+            <TouchableOpacity
+              style={[styles.roomItem, item.unreadForUser && styles.unreadRoom]}
+              onPress={() => openChatWithPaymentCheck(item)}
+            >
               <Text style={styles.consultantName}>{item.consultantName}</Text>
               <Text style={styles.lastMessage}>{item.lastMessage || "No messages yet"}</Text>
               {active && item.unreadForUser && <Text style={styles.newMessage}>● New message</Text>}
@@ -268,14 +226,13 @@ export default function ChatList() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F3F9FA" },
-  tabContainer: { flexDirection: "row", padding: 16, justifyContent: "space-around" },
-  tabText: { fontWeight: "700", color: "#888", fontSize: 16 },
-  activeTab: { color: "#0F3E48" },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16 },
+  title: { fontSize: 24, fontWeight: "700", color: "#0F3E48" },
+  iconButton: { padding: 6, borderRadius: 50, backgroundColor: "#FFF", elevation: 3 },
   roomItem: { paddingVertical: 14, borderBottomWidth: 1, borderColor: "#ddd", backgroundColor: "#FFF", paddingHorizontal: 10, borderRadius: 6, marginBottom: 6 },
   unreadRoom: { backgroundColor: "#FFF4F4" },
   consultantName: { fontSize: 16, fontWeight: "bold", color: "#0F3E48" },
   lastMessage: { fontSize: 14, color: "gray", marginTop: 4 },
-  pendingText: { color: "orange", fontWeight: "bold", marginTop: 4 },
   newMessage: { color: "red", fontWeight: "bold", marginTop: 4 },
   emptyListText: { textAlign: "center", marginTop: 20, color: "gray" },
 });

@@ -1,6 +1,6 @@
 // app/(User)/ChatRoom.jsx
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -14,7 +14,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { db } from "../../config/firebase";
 import { listenToMessages, markUserChatAsRead } from "../../services/chatService";
@@ -24,36 +24,34 @@ import RatingModal from "../components/RatingModal";
 
 export default function ChatRoom() {
   const { roomId: _roomId, userId, consultantId } = useLocalSearchParams();
-  const router = useRouter();
-
   const [roomId, setRoomId] = useState(_roomId || `${userId}_${consultantId}`);
-  const [text, setText] = useState("");
   const [user, setUser] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [text, setText] = useState("");
   const [typing, setTyping] = useState(false);
-  const [sessionActive, setSessionActive] = useState(true);
   const [ratingModalVisible, setRatingModalVisible] = useState(false);
 
-  // --- Image modal ---
+  // Image modal
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [modalImageUri, setModalImageUri] = useState(null);
 
   const flatListRef = useRef(null);
 
-  // --- Load user profile ---
+  // --- Load user profile
   useEffect(() => {
     const loadProfile = async () => {
       try {
         const keys = await AsyncStorage.getAllKeys();
         const profileKey = keys.find(
-          (k) =>
-            k.startsWith("aestheticai:client-profile:") ||
-            k.startsWith("aestheticai:user-profile:")
+          (k) => k.startsWith("aestheticai:client-profile:") || k.startsWith("aestheticai:user-profile:")
         );
         if (!profileKey) return;
+
         const raw = await AsyncStorage.getItem(profileKey);
         if (!raw) return;
-        setUser(JSON.parse(raw));
+
+        const parsed = JSON.parse(raw);
+        setUser({ ...parsed, uid: parsed.uid || parsed.userId || parsed.id });
       } catch (err) {
         console.log("❌ Failed to load user profile:", err);
       }
@@ -61,38 +59,44 @@ export default function ChatRoom() {
     loadProfile();
   }, []);
 
-  // --- Ensure chat room exists ---
   useEffect(() => {
     if (!roomId || !userId || !consultantId) return;
-
-    const ensureChatRoom = async () => {
-      const chatRoomRef = doc(db, "chatRooms", roomId);
-      const snap = await getDoc(chatRoomRef);
-
-      if (!snap.exists()) {
-        await setDoc(chatRoomRef, {
+  
+    const chatRoomRef = doc(db, "chatRooms", roomId);
+  
+    const unsubscribeChatRoom = onSnapshot(chatRoomRef, (snapshot) => {
+      const data = snapshot.data();
+      if (!data) return;
+  
+      // If document doesn't exist, create it
+      if (!snapshot.exists()) {
+        setDoc(chatRoomRef, {
           userId,
           consultantId,
           createdAt: serverTimestamp(),
           lastMessage: "",
           lastMessageAt: serverTimestamp(),
           status: "active",
-        });
+          ratingSubmitted: false,
+          appointmentDate: serverTimestamp(),
+        }).catch(console.log);
+        return;
       }
-
-      // Listen for consultant marking as complete
-      onSnapshot(chatRoomRef, (snapshot) => {
-        const data = snapshot.data();
-        if (data?.status === "completed") {
-          setRatingModalVisible(true);
-        }
-      });
-    };
-
-    ensureChatRoom().catch(console.log);
+  
+      const now = new Date();
+      const appointmentDate = data.appointmentDate?.toDate ? data.appointmentDate.toDate() : new Date(data.appointmentDate);
+  
+      // Check if completed and rating not submitted
+      if (data.status === "completed" && !data.ratingSubmitted && appointmentDate <= now) {
+        console.log("🟢 Consultant marked chat as complete → showing rating modal");
+        setRatingModalVisible(true);
+      }
+    });
+  
+    return () => unsubscribeChatRoom();
   }, [roomId, userId, consultantId]);
 
-  // --- Use send message hook ---
+  // --- Send message hooks
   const { sendTextMessage, sendFileMessage } = useSendMessage({
     roomId,
     senderId: user?.uid,
@@ -100,20 +104,26 @@ export default function ChatRoom() {
     setMessages,
   });
 
-  // --- Real-time message listener ---
+  // --- Listen for messages + handle unsent
   useEffect(() => {
-    if (!roomId || !user || !sessionActive) return;
+    if (!roomId || !user) return;
 
-    const unsubscribe = listenToMessages(roomId, (msgs) => {
-      setMessages(msgs);
+    const unsubscribeMessages = listenToMessages(roomId, (msgs) => {
+      setMessages((prevMsgs) => {
+        return msgs.map((m) => {
+          const existing = prevMsgs.find((pm) => pm.id === m.id);
+          return existing && existing.unsent ? existing : m;
+        });
+      });
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 80);
     });
 
     markUserChatAsRead(roomId).catch(() => {});
-    return () => unsubscribe();
-  }, [roomId, user, sessionActive]);
 
-  // --- Render message ---
+    return () => unsubscribeMessages();
+  }, [roomId, user]);
+
+  // --- Render single message
   const renderMessage = ({ item }) => {
     const mine = item.senderType === "user";
     const textColor = mine ? "#fff" : "#000";
@@ -122,7 +132,9 @@ export default function ChatRoom() {
       <TouchableOpacity
         style={[styles.message, mine ? styles.myMessage : styles.theirMessage]}
         onLongPress={() => {
-          handleUnsendMessage(item, roomId, user.uid, setMessages);
+          if (!user?.uid) return;
+          const senderId = item.senderId || item.userId || item.senderUid;
+          handleUnsendMessage(item, roomId, senderId, setMessages);
         }}
       >
         {children}
@@ -130,6 +142,7 @@ export default function ChatRoom() {
     );
 
     if (item.unsent) {
+      console.log(`🟠 Message unsent: ${item.id}`);
       return (
         <Wrapper>
           <Text style={[styles.messageText, styles.unsentText, { color: textColor }]}>
@@ -183,10 +196,7 @@ export default function ChatRoom() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: "#fff" }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: "#fff" }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={styles.container}>
         <Text style={styles.header}>Chat Room</Text>
 
@@ -230,28 +240,15 @@ export default function ChatRoom() {
       </View>
 
       {/* Image Modal */}
-      <Modal
-        visible={imageModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setImageModalVisible(false)}
-      >
+      <Modal visible={imageModalVisible} transparent animationType="fade" onRequestClose={() => setImageModalVisible(false)}>
         <View style={styles.modalBackground}>
           {modalImageUri ? (
             <Image source={{ uri: modalImageUri }} style={styles.modalImage} resizeMode="contain" />
           ) : (
             <ActivityIndicator size="large" color="#fff" />
           )}
-
           <TouchableOpacity
-            style={{
-              position: "absolute",
-              top: 40,
-              right: 20,
-              padding: 10,
-              backgroundColor: "rgba(255,255,255,0.3)",
-              borderRadius: 20,
-            }}
+            style={{ position: "absolute", top: 40, right: 20, padding: 10, backgroundColor: "rgba(255,255,255,0.3)", borderRadius: 20 }}
             onPress={() => setImageModalVisible(false)}
           >
             <Text style={{ color: "#fff", fontWeight: "bold" }}>Close</Text>
@@ -266,14 +263,11 @@ export default function ChatRoom() {
         onSubmit={async (rating, comment) => {
           try {
             const roomRef = doc(db, "chatRooms", roomId);
-            await updateDoc(roomRef, {
-              rating: rating,
-              ratingComment: comment,
-              reviewerName, 
-            });
+            await updateDoc(roomRef, { ratingSubmitted: true });
+            console.log("🟢 Rating submitted successfully");
             setRatingModalVisible(false);
           } catch (err) {
-            console.log("Failed to submit rating:", err);
+            console.log("❌ Failed to submit rating:", err);
           }
         }}
       />
@@ -292,17 +286,7 @@ const styles = StyleSheet.create({
   statusText: { color: "#ccc", fontSize: 10, marginTop: 3 },
   failedText: { color: "#c33", fontSize: 10, marginTop: 3 },
   typingText: { marginLeft: 10, marginBottom: 4, color: "#4a4a4a" },
-  inputContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    padding: 10,
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderColor: "#ccc",
-  },
+  inputContainer: { position: "absolute", bottom: 0, left: 0, right: 0, flexDirection: "row", padding: 10, backgroundColor: "#fff", borderTopWidth: 1, borderColor: "#ccc" },
   attachBtn: { justifyContent: "center", marginRight: 10 },
   attachText: { fontSize: 22 },
   input: { flex: 1, padding: 10, backgroundColor: "#F5F5F5", borderRadius: 10 },

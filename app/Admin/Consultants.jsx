@@ -1,23 +1,25 @@
+import { Ionicons } from "@expo/vector-icons";
 import { collection, getDocs } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  ScrollView,
-  Linking
 } from "react-native";
 import { db } from "../../config/firebase";
 import BottomNavbar from "../components/BottomNav";
-import { useRouter } from "expo-router";
+import ConsultantDetailsModal from "../components/ConsultantDetailsModal";
 
 export default function Consultantst() {
   const [consultants, setConsultants] = useState([]);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  const [selectedConsultant, setSelectedConsultant] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
   useEffect(() => {
     const fetchConsultants = async () => {
@@ -38,6 +40,11 @@ export default function Consultantst() {
     fetchConsultants();
   }, []);
 
+  const openModal = (consultant) => {
+    setSelectedConsultant(consultant);
+    setModalVisible(true);
+  };
+
   if (loading) {
     return (
       <View style={styles.loader}>
@@ -54,62 +61,43 @@ export default function Consultantst() {
 
         {consultants.map((c) => (
           <View key={c.id} style={styles.card}>
-            <Text style={styles.name}>{c.fullName}</Text>
-            <Text style={styles.email}>{c.email}</Text>
+            <View style={styles.row}>
+              {/* ✅ Info sa kaliwa */}
+              <View style={styles.info}>
+                <View style={styles.nameRow}>
+                  <Text style={styles.name}>{c.fullName}</Text>
+                  {c.status === "accepted" && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={18}
+                      color="green"
+                      style={styles.checkIcon}
+                    />
+                  )}
+                </View>
+                <Text style={styles.email}>{c.email}</Text>
+              </View>
 
-            {/* ---------- PORTFOLIO FILE INDICATOR ---------- */}
-            <Text style={{ marginTop: 5 }}>
-              Portfolio:{" "}
-              {c.portfolioURL ? (
-                <Text style={{ color: "green", fontWeight: "600" }}>
-                  Available
-                </Text>
-              ) : (
-                <Text style={{ color: "red" }}>None</Text>
-              )}
-            </Text>
-
-            {/* ---------- VIEW PORTFOLIO BUTTON ---------- */}
-            {c.portfolioURL && (
-              <TouchableOpacity
-                style={styles.portfolioBtn}
-                onPress={() => Linking.openURL(c.portfolioURL)}
-              >
-                <Text style={styles.portfolioText}>VIEW PORTFOLIO FILE</Text>
+              {/* ✅ Image sa kanan, tap to open modal */}
+              <TouchableOpacity onPress={() => openModal(c)}>
+                <Image
+                  source={require("../../assets/image.png")}
+                  style={styles.imageRight}
+                />
               </TouchableOpacity>
-            )}
-
-            <Text style={styles.status}>
-              Status:{" "}
-              <Text
-                style={{
-                  color:
-                    c.status === "accepted"
-                      ? "green"
-                      : c.status === "rejected"
-                      ? "red"
-                      : "orange",
-                  fontWeight: "bold",
-                }}
-              >
-                {c.status || "pending"}
-              </Text>
-            </Text>
-
-            <TouchableOpacity
-              style={styles.viewBtn}
-              onPress={() =>
-                router.push({
-                  pathname: "Admin//ConsultantDetails",
-                  params: { data: JSON.stringify(c) },
-                })
-              }
-            >
-              <Text style={styles.viewText}>VIEW</Text>
-            </TouchableOpacity>
+            </View>
           </View>
         ))}
       </ScrollView>
+
+      {/* Modal */}
+      {selectedConsultant && (
+        <ConsultantDetailsModal
+          visible={modalVisible}
+          onClose={() => setModalVisible(false)}
+          data={selectedConsultant} // ✅ pass object, not JSON string
+        />
+      )}
 
       <BottomNavbar role="admin" />
     </View>
@@ -133,31 +121,27 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     elevation: 3,
   },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between", // distribute left info and right image
+  },
+  info: {
+    flex: 1,
+    marginRight: 10,
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   name: { fontSize: 18, fontWeight: "bold", color: "#0F3E48" },
-  email: { color: "#333", marginBottom: 5 },
-
-  /* Portfolio button */
-  portfolioBtn: {
-    backgroundColor: "#2176AE",
-    paddingVertical: 8,
-    borderRadius: 6,
-    marginTop: 8,
+  checkIcon: {
+    marginLeft: 6,
   },
-  portfolioText: {
-    textAlign: "center",
-    color: "#fff",
-    fontWeight: "600",
-  },
-
-  status: { marginVertical: 10 },
-  viewBtn: {
-    backgroundColor: "#0F3E48",
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  viewText: {
-    textAlign: "center",
-    color: "#fff",
-    fontWeight: "bold",
+  email: { color: "#666", fontSize: 13 },
+  imageRight: {
+    width: 40,
+    height: 40,
+    resizeMode: "cover", // rectangular image
   },
 });

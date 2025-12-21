@@ -29,10 +29,9 @@ export default function ConsultantProfile() {
 
   const [consultant, setConsultant] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  const [scheduleVisible, setScheduleVisible] = useState(false);
   const [ratings, setRatings] = useState([]);
   const [ratingsLoading, setRatingsLoading] = useState(true);
+  const [scheduleVisible, setScheduleVisible] = useState(false);
 
   // Fetch consultant profile
   useEffect(() => {
@@ -42,7 +41,7 @@ export default function ConsultantProfile() {
         const snap = await getDoc(ref);
         if (snap.exists()) setConsultant({ id: snap.id, ...snap.data() });
       } catch (err) {
-        console.log("Error:", err);
+        console.log("Error fetching consultant:", err);
       } finally {
         setLoading(false);
       }
@@ -94,7 +93,7 @@ export default function ConsultantProfile() {
   // Average rating
   const averageRating =
     ratings.length > 0
-      ? ratings.reduce((a, b) => a + b.rating, 0) / ratings.length
+      ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
       : 0;
 
   // Format timestamp for display
@@ -107,6 +106,22 @@ export default function ConsultantProfile() {
       year: "numeric",
     });
   };
+
+  // Normalize availability for display
+  const availabilitySlots = (() => {
+    if (!consultant.availability) return [];
+    if (Array.isArray(consultant.availability)) {
+      // If array of strings, convert to objects
+      if (consultant.availability.length > 0 && typeof consultant.availability[0] === "string") {
+        return consultant.availability.map(day => ({ day }));
+      }
+      return consultant.availability;
+    } else if (typeof consultant.availability === "object") {
+      // If object, convert keys to array
+      return Object.keys(consultant.availability).map(day => ({ day }));
+    }
+    return [];
+  })();
 
   return (
     <ScrollView style={styles.page}>
@@ -150,7 +165,7 @@ export default function ConsultantProfile() {
           <Text style={styles.statLabel}>Experience</Text>
         </View>
         <View style={styles.statBox}>
-          <Text style={styles.statValue}>{consultant.availability?.length || 0}</Text>
+          <Text style={styles.statValue}>{availabilitySlots.length}</Text>
           <Text style={styles.statLabel}>Schedules</Text>
         </View>
       </View>
@@ -183,14 +198,13 @@ export default function ConsultantProfile() {
           </View>
         )}
 
+        {/* AVAILABILITY — DISPLAY DAY ONLY */}
         <Text style={[styles.title, { marginTop: 10 }]}>Availability</Text>
-        {consultant.availability?.length > 0 ? (
-          consultant.availability.map((slot, idx) => (
+        {availabilitySlots.length > 0 ? (
+          availabilitySlots.map((slot, idx) => (
             <View key={idx} style={styles.infoItem}>
               <Ionicons name="time-outline" size={20} color="#4CAF50" />
-              <Text style={styles.infoText}>
-                {slot.day}: {slot.am} / {slot.pm}
-              </Text>
+              <Text style={styles.infoText}>{slot.day}</Text>
             </View>
           ))
         ) : (
@@ -201,14 +215,12 @@ export default function ConsultantProfile() {
       {/* RATINGS / FEEDBACK */}
       <View style={styles.infoCard}>
         <Text style={styles.title}>User Feedback</Text>
-
         {ratingsLoading ? (
           <ActivityIndicator size="small" color="#4CAF50" />
         ) : ratings.length === 0 ? (
           <Text style={styles.noInfo}>No ratings yet.</Text>
         ) : (
           <>
-            {/* Average Rating + Review Count */}
             <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
               {[1, 2, 3, 4, 5].map((i) => (
                 <Ionicons
@@ -224,30 +236,25 @@ export default function ConsultantProfile() {
               </Text>
             </View>
 
-            {/* Individual Reviews */}
             {ratings.map((r) => (
               <View key={r.id} style={styles.reviewCard}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center" }}>
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <Ionicons
-                        key={i}
-                        name={i <= r.rating ? "star" : "star-outline"}
-                        size={14}
-                        color="#FFD700"
-                        style={{ marginRight: 1 }}
-                      />
-                    ))}
-                    <Text style={{ fontSize: 12, color: "#555", marginLeft: 4 }}>
-                      {r.rating.toFixed(1)}
-                    </Text>
-                  </View>
-                  <Text style={{ fontSize: 11, color: "#777" }}>
-                    {r.reviewerName?.trim() ? r.reviewerName : "Anonymous"} • {formatDate(r.timestamp)}
-                  </Text>
+                <Text style={styles.reviewName}>
+                  {r.reviewerName?.trim() ? r.reviewerName : "Anonymous"}
+                </Text>
+                <Text style={styles.reviewDate}>{formatDate(r.timestamp)}</Text>
+                <View style={{ flexDirection: "row", marginVertical: 6 }}>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Ionicons
+                      key={i}
+                      name={i <= r.rating ? "star" : "star-outline"}
+                      size={16}
+                      color="#FFD700"
+                      style={{ marginRight: 2 }}
+                    />
+                  ))}
                 </View>
-                {r.feedback ? (
-                  <Text style={{ fontSize: 13, color: "#333" }}>{r.feedback}</Text>
+                {r.feedback?.trim() ? (
+                  <Text style={styles.reviewText}>{r.feedback}</Text>
                 ) : null}
               </View>
             ))}
@@ -268,7 +275,7 @@ export default function ConsultantProfile() {
         visible={scheduleVisible}
         onClose={() => setScheduleVisible(false)}
         consultantId={consultant.id}
-        availability={consultant.availability}
+        availability={availabilitySlots}
       />
     </ScrollView>
   );
@@ -304,15 +311,8 @@ const styles = StyleSheet.create({
   chatBtn: { backgroundColor: "#0F3E48", margin: 20, padding: 15, borderRadius: 12, flexDirection: "row", justifyContent: "center", alignItems: "center" },
   chatText: { color: "#fff", fontSize: 16, marginLeft: 8, fontWeight: "600" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  reviewCard: {
-    backgroundColor: "#F7F7F7",
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 10,
-    elevation: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
+  reviewName: { fontSize: 14, fontWeight: "700", color: "#0F3E48" },
+  reviewDate: { fontSize: 11, color: "#777", marginTop: 2 },
+  reviewText: { fontSize: 13, color: "#333", marginTop: 4, lineHeight: 18 },
+  reviewCard: { backgroundColor: "#F7F7F7", padding: 10, borderRadius: 10, marginBottom: 10, elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
 });

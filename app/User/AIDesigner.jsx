@@ -1,5 +1,4 @@
 // app/user/AIDesigner.jsx
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -10,18 +9,17 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Image,
 } from "react-native";
 import useSubscriptionType from "../../services/useSubscriptionType";
 import BottomNavbar from "../components/BottomNav";
-
 
 export default function AIDesigner() {
   const router = useRouter();
   const subType = useSubscriptionType();
 
-
   // Mock chat summaries for history
-  const [chatSummaries, setChatSummaries] = useState({
+  const [chatSummaries] = useState({
     design: [
       { id: "1", title: "Living Room Design", lastMessage: "Great! I suggest neutral colors...", date: "2025-11-17" },
       { id: "2", title: "Workspace Redesign", lastMessage: "Consider adding a small desk...", date: "2025-11-15" },
@@ -31,12 +29,10 @@ export default function AIDesigner() {
     ],
   });
 
-  // Open chat screen for top card
   const openChatScreen = (mode) => {
     router.push(`/User/AIDesignerChat?tab=${mode}&chatId=new`);
   };
 
-  // Open chat for history item
   const openChatHistory = (tab, chatId) => {
     router.push(`/User/AIDesignerChat?tab=${tab}&chatId=${chatId}`);
   };
@@ -48,34 +44,33 @@ export default function AIDesigner() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={90}
       >
-        {/* Top Cards (stacked vertically) */}
+        {/* ✅ Top Cards side-by-side with pastel colors */}
         <View style={styles.cardsContainer}>
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => openChatScreen("design")}
-          >
-            <Ionicons name="color-palette" size={30} color="#0F3E48" />
-            <Text style={styles.cardText}>Design with AI</Text>
+          <TouchableOpacity onPress={() => openChatScreen("design")} style={styles.cardTeal}>
+            <View style={styles.cardContent}>
+              <Image source={require("../../assets/design.png")} style={styles.cardIcon} />
+              <Text style={styles.cardText}>Design with AI</Text>
+            </View>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => openChatScreen("customize")}
-          >
-            <Ionicons name="construct-outline" size={30} color="#0F3E48" />
-            <Text style={styles.cardText}>Customize with AI</Text>
+          <TouchableOpacity onPress={() => openChatScreen("customize")} style={styles.cardPink}>
+            <View style={styles.cardContent}>
+              <Image source={require("../../assets/customize.png")} style={styles.cardIcon} />
+              <Text style={styles.cardText}>Customize with AI</Text>
+            </View>
           </TouchableOpacity>
         </View>
 
-        {/* History Title */}
-        <Text style={styles.historyTitle}>History</Text>
+        {/* ✅ History Title */}
+        <Text style={styles.historyTitle}>Recent Conversations</Text>
 
-        {/* Chat Summaries */}
+        {/* ✅ Chat Summaries */}
         <ScrollView style={styles.historyContainer} showsVerticalScrollIndicator={false}>
           {chatSummaries.design.concat(chatSummaries.customize).map((chat) => (
             <TouchableOpacity
               key={`${chat.id}-${chat.title}`}
               style={styles.historyItem}
+              activeOpacity={0.7}
               onPress={() =>
                 openChatHistory(
                   chatSummaries.design.includes(chat) ? "design" : "customize",
@@ -83,7 +78,10 @@ export default function AIDesigner() {
                 )
               }
             >
-              <Text style={styles.historyItemTitle}>{chat.title}</Text>
+              <View style={styles.historyHeader}>
+                <View style={styles.historyAccent} />
+                <Text style={styles.historyItemTitle}>{chat.title}</Text>
+              </View>
               <Text style={styles.historyItemSnippet}>{chat.lastMessage}</Text>
               <Text style={styles.historyItemDate}>{chat.date}</Text>
             </TouchableOpacity>
@@ -91,44 +89,90 @@ export default function AIDesigner() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Bottom Navbar */}
+      {/* ✅ Bottom Navbar */}
       <BottomNavbar subType={subType} />
-      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: "#F3F9FA" },
-  container: { flex: 1, paddingHorizontal: 15, paddingTop: 50 },
-  
-  // Stack cards vertically
-  cardsContainer: { 
-    flexDirection: "column", 
-    justifyContent: "flex-start", 
-    marginBottom: 15, 
-    gap: 10, // spacing between cards
-  },
+  container: { flex: 1, paddingHorizontal: 20, paddingTop: 50 },
 
-  card: {
-    height: 100,
-    backgroundColor: "#FFF",
-    borderRadius: 15,
+  // ✅ Top Cards side-by-side
+  cardsContainer: { flexDirection: "row", justifyContent: "space-between", marginBottom: 30 },
+  cardTeal: {
+    flex: 1,
+    height: 120,
+    borderRadius: 20,
+    backgroundColor: "#e0f7fa", // pastel teal
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    marginHorizontal: 4,
+  },
+  cardPink: {
+    flex: 1,
+    height: 120,
+    borderRadius: 20,
+    backgroundColor: "#fce4ec", // pastel pink
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    marginHorizontal: 4,
+  },
+  cardContent: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    elevation: 3,
   },
-  cardText: { marginTop: 8, fontWeight: "600", color: "#0F3E48", textAlign: "center" },
-
-  historyTitle: { fontSize: 20, fontWeight: "600", color: "#0F3E48", marginBottom: 10 },
-  historyContainer: { flex: 1, marginBottom: 70 }, // leave space for bottom navbar
-  historyItem: {
-    backgroundColor: "#FFF",
-    padding: 12,
-    borderRadius: 12,
+  cardIcon: {
+    width: 48,
+    height: 48,
+    resizeMode: "contain",
     marginBottom: 10,
+  },
+  cardText: {
+    fontWeight: "600",
+    color: "#0F3E48",
+    fontSize: 14,
+    textAlign: "center",
+    letterSpacing: 0.5,
+  },
+
+  // ✅ History Section
+  historyTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#912f56",
+    marginBottom: 18,
+    marginLeft: 4,
+  },
+  historyContainer: { flex: 1, marginBottom: 80 },
+  historyItem: {
+    backgroundColor: "#faf9f6",
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 14,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
+  historyHeader: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
+  historyAccent: {
+    width: 6,
+    height: 20,
+    backgroundColor: "#912f56",
+     borderRadius: 3,
+    marginRight: 8,
+  },
   historyItemTitle: { fontWeight: "700", color: "#0F3E48", fontSize: 16 },
-  historyItemSnippet: { color: "#4A6B70", fontSize: 13, marginTop: 3 },
-  historyItemDate: { color: "#AAA", fontSize: 12, marginTop: 2, textAlign: "right" },
+  historyItemSnippet: { color: "#4A6B70", fontSize: 13, marginTop: 2 },
+  historyItemDate: { color: "#888", fontSize: 12, marginTop: 6, textAlign: "right" },
 });

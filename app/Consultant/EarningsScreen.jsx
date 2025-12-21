@@ -22,6 +22,7 @@ import {
   View,
 } from "react-native";
 import { db } from "../../config/firebase";
+import BottomNavbar from "../components/BottomNav";   // ✅ import navbar
 
 export default function EarningsScreen() {
   const [entries, setEntries] = useState([]);
@@ -33,9 +34,6 @@ export default function EarningsScreen() {
   const auth = getAuth();
   const consultantUid = auth.currentUser.uid;
 
-  // ----------------------------------------------------------
-  // FETCH ALL PAYMENTS FOR THIS CONSULTANT
-  // ----------------------------------------------------------
   useEffect(() => {
     const ref = collection(db, "payments");
     const q = query(
@@ -45,12 +43,11 @@ export default function EarningsScreen() {
     );
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const items = await Promise.all(
+      let items = await Promise.all(
         snapshot.docs.map(async (docSnap) => {
           const data = docSnap.data();
           let userName = "System";
 
-          // Fetch client name if earning
           if (data.userId && data.type === "consultant_earning") {
             try {
               const userRef = doc(db, "users", data.userId);
@@ -69,7 +66,6 @@ export default function EarningsScreen() {
           const rawAmount = Number(data.amount) || 0;
           let consultantAmount = rawAmount;
 
-          // Apply 70% share for earnings
           if (data.type === "consultant_earning") {
             consultantAmount = rawAmount * 0.7;
           }
@@ -83,6 +79,23 @@ export default function EarningsScreen() {
         })
       );
 
+      if (items.length === 0) {
+        items = [
+          {
+            id: "dummy1",
+            type: "consultant_earning",
+            consultantAmount: 700,
+            createdAt: { toDate: () => new Date() },
+          },
+          {
+            id: "dummy2",
+            type: "withdraw",
+            consultantAmount: -300,
+            createdAt: { toDate: () => new Date() },
+          },
+        ];
+      }
+
       setEntries(items);
       setLoading(false);
     });
@@ -90,20 +103,14 @@ export default function EarningsScreen() {
     return unsubscribe;
   }, [consultantUid]);
 
-  // ------------------------------------
-  // COMPUTE TOTAL BALANCE
-  // ------------------------------------
   const total = entries.reduce((sum, e) => sum + e.consultantAmount, 0);
 
-  // ----------------------------------------------------------
-  // RECORD EARNING (call when session is completed)
-  // ----------------------------------------------------------
   const recordEarning = async (userId, amount) => {
     try {
       await addDoc(collection(db, "payments"), {
         consultantId: consultantUid,
         userId: userId,
-        type: "consultant_earning",   // 🔥 consistent everywhere
+        type: "consultant_earning",
         amount: amount,
         createdAt: serverTimestamp(),
         status: "completed",
@@ -115,9 +122,6 @@ export default function EarningsScreen() {
     }
   };
 
-  // ----------------------------------------------------------
-  // SUBMIT WITHDRAW
-  // ----------------------------------------------------------
   const submitWithdraw = async () => {
     if (!withdrawAmount.trim() || !gcashNumber.trim()) {
       Alert.alert("Missing Info", "Please enter amount and GCash number.");
@@ -160,18 +164,19 @@ export default function EarningsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Balance Box */}
-      <View style={styles.balanceBox}>
-        <Text style={styles.balanceLabel}>Your Balance</Text>
-        <Text style={styles.balanceAmount}>₱ {total.toFixed(2)}</Text>
+      {/* Balance Card with Withdraw button inside */}
+      <View style={styles.balanceCard}>
+        <View>
+          <Text style={styles.balanceLabel}>Your Balance</Text>
+          <Text style={styles.balanceAmount}>₱ {total.toFixed(2)}</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.balanceWithdrawBtn}
+          onPress={() => setWithdrawVisible(true)}
+        >
+          <Text style={styles.balanceWithdrawText}>Withdraw</Text>
+        </TouchableOpacity>
       </View>
-
-      <TouchableOpacity
-        style={styles.withdrawBtn}
-        onPress={() => setWithdrawVisible(true)}
-      >
-        <Text style={styles.withdrawText}>Withdraw</Text>
-      </TouchableOpacity>
 
       {loading ? (
         <Text>Loading...</Text>
@@ -200,8 +205,6 @@ export default function EarningsScreen() {
               <Text style={styles.date}>
                 {item.createdAt?.toDate().toLocaleString()}
               </Text>
-              <Text style={styles.small}>User: {item.userName}</Text>
-              <Text style={styles.small}>Status: {item.status}</Text>
             </View>
           )}
         />
@@ -222,16 +225,26 @@ export default function EarningsScreen() {
               placeholder="Enter amount"
             />
 
-            <Text style={styles.inputLabel}>GCash Number</Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="phone-pad"
-              value={gcashNumber}
-              onChangeText={setGcashNumber}
-              placeholder="Enter number"
-            />
+            {/* GCash Card styled same as Balance */}
+            <View style={styles.gcashCard}>
+              <View style={styles.gcashRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.gcashLabel}>GCash Number</Text>
+                  <TextInput
+                    style={styles.gcashInput}
+                    keyboardType="phone-pad"
+                    value={gcashNumber}
+                    onChangeText={setGcashNumber}
+                    placeholder="Enter number"
+                  />
+                </View>
+              </View>
+            </View>
 
-            <TouchableOpacity style={styles.submitBtn} onPress={submitWithdraw}>
+            <TouchableOpacity
+              style={styles.submitBtn}
+              onPress={submitWithdraw}
+            >
               <Text style={styles.submitText}>Submit Withdraw</Text>
             </TouchableOpacity>
 
@@ -244,107 +257,190 @@ export default function EarningsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ✅ Bottom navigation bar */}
+      <BottomNavbar role="consultant" />
     </View>
   );
 }
+
 
 // ------------------------------------------------------------
 // STYLES
 // ------------------------------------------------------------
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#fff" },
+  container: { flex: 1, padding: 20, backgroundColor: "#F3F9FA" },
 
-  balanceBox: {
-    backgroundColor: "#0F3E48",
-    paddingVertical: 20,
-    paddingHorizontal: 25,
-    borderRadius: 15,
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 5,
+  balanceCard: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
+    padding: 22,
+    borderRadius: 20,
+    backgroundColor: "#01579B", // ocean blue
+    marginBottom: 26,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
-  balanceLabel: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#fff",
-    marginBottom: 8,
-  },
+  balanceLabel: { fontSize: 15, fontWeight: "600", color: "#BBDEFB" },
   balanceAmount: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#2ecc71",
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    marginTop: 6,
+    letterSpacing: 0.5,
   },
-
-  withdrawBtn: {
-    backgroundColor: "#0F3E48",
-    paddingVertical: 12,
-    borderRadius: 10,
-    marginBottom: 15,
+  balanceWithdrawBtn: {
+    backgroundColor: "#3fa796",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 12,
   },
-  withdrawText: {
+  balanceWithdrawText: {
     color: "#fff",
-    textAlign: "center",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
+    textAlign: "center",
   },
 
   card: {
-    padding: 15,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    marginBottom: 10,
+    padding: 18,
+    borderRadius: 14,
+    marginBottom: 14,
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
-  amount: { fontSize: 18, fontWeight: "bold" },
-  date: { marginTop: 4, color: "#555" },
+  amount: { fontSize: 18, fontWeight: "700" },
+  date: { marginTop: 6, color: "#555", fontSize: 13 },
   small: { fontSize: 12, marginTop: 2, color: "#777" },
+
   modalContainer: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
-    padding: 20,
+    padding: 24,
   },
   modalBox: {
     backgroundColor: "#fff",
-    padding: 25,
-    borderRadius: 12,
+    padding: 30,
+    borderRadius: 18,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    marginBottom: 15,
+    fontSize: 22,
+    fontWeight: "800",
+    marginBottom: 20,
     color: "#0F3E48",
+    textAlign: "center",
+    letterSpacing: 0.5,
   },
 
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0F3E48",
+    marginBottom: 6,
+    marginTop: 12,
+  },
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: "#ccc",
     padding: 12,
-    borderRadius: 10,
+    borderRadius: 12,
     fontSize: 16,
-    marginBottom: 10,
+    marginBottom: 14,
+    backgroundColor: "#F9FAFB",
   },
+
+  gcashCard: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 22,
+    borderRadius: 20,
+    backgroundColor: "#01579B", // ocean blue, same as balance card
+    marginBottom: 26,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  gcashRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  gcashLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#BBDEFB",
+    marginBottom: 8,
+    letterSpacing: 0.4,
+  },
+  gcashInput: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    padding: 12,
+    borderRadius: 12,
+    fontSize: 16,
+    backgroundColor: "#F9FAFB",
+    color: "#0F3E48",
+  },
+  gcashWithdrawBtn: {
+    backgroundColor: "#3fa796",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginLeft: 12,
+  },
+  gcashWithdrawText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 13,
+    textAlign: "center",
+  },
+
   submitBtn: {
-    backgroundColor: "#0F3E48",
+    backgroundColor: "#0277BD",
     padding: 15,
     borderRadius: 12,
     marginTop: 10,
+    shadowColor: "#0277BD",
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   submitText: {
     color: "#FFF",
     textAlign: "center",
     fontWeight: "700",
     fontSize: 17,
+    letterSpacing: 0.5,
   },
-  cancelBtn: { marginTop: 10, padding: 12 },
+
+  cancelBtn: { 
+    marginTop: 14, 
+    padding: 12, 
+    borderRadius: 12,
+    backgroundColor: "#ECEFF1",
+  },
   cancelText: {
     textAlign: "center",
     fontSize: 15,
     fontWeight: "600",
-    color: "#666",
+    color: "#37474F",
   },
 });

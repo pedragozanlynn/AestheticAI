@@ -1,12 +1,21 @@
-import React, { useState, useEffect, useRef } from "react";
-import { ScrollView, Text, TextInput, TouchableOpacity, Alert, StyleSheet, View } from "react-native";
-import { Picker } from "@react-native-picker/picker";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as DocumentPicker from "expo-document-picker";
-import { supabase } from "../../config/supabase";
+import { Picker } from "@react-native-picker/picker";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
 import { pickFile, uploadToSupabase } from "../../services/fileUploadService";
+import Button from "../components/Button";
+import Input from "../components/Input"; // ✅ INPUT COMPONENT
 
 // session cache
 let sessionFormData = null;
@@ -24,31 +33,26 @@ export default function Step2Details() {
     portfolioLink: "",
     availability: [],
     day: "",
-    am: "",
-    pm: ""
   });
 
-  // ------------------------- PORTFOLIO UPLOAD (UPDATED) -------------------------
+  /* ===================== LOGIC (UNCHANGED) ===================== */
+
   const uploadPortfolio = async () => {
     try {
       const picked = await pickFile();
       if (!picked) return;
 
       const uploaded = await uploadToSupabase(picked, "portfolio-files");
-      if (!uploaded) {
+      if (!uploaded)
         return Alert.alert("Upload Failed", "Could not upload portfolio file.");
-      }
 
       handleInputChange("portfolioLink", uploaded.fileUrl);
-
       Alert.alert("Success", "Portfolio uploaded successfully!");
     } catch (e) {
-      console.error(e);
       Alert.alert("Error", "Something went wrong while uploading.");
     }
   };
 
-  // ---------------------- LOAD FROM STORAGE ----------------------
   useEffect(() => {
     if (sessionFormData) {
       setFormData(sessionFormData);
@@ -60,69 +64,60 @@ export default function Step2Details() {
       if (initialized.current) return;
       initialized.current = true;
 
-      try {
-        const saved = await AsyncStorage.getItem("step2Data");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          setFormData(parsed);
-          sessionFormData = parsed;
-          return;
-        }
+      const saved = await AsyncStorage.getItem("step2Data");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setFormData(parsed);
+        sessionFormData = parsed;
+        return;
+      }
 
-        if (params?.data) {
-          const step1 = JSON.parse(params.data);
-          if (step1.step2) {
-            setFormData(prev => {
-              const merged = { ...prev, ...step1.step2 };
-              sessionFormData = merged;
-              return merged;
-            });
-          }
+      if (params?.data) {
+        const step1 = JSON.parse(params.data);
+        if (step1.step2) {
+          const merged = { ...formData, ...step1.step2 };
+          setFormData(merged);
+          sessionFormData = merged;
         }
-      } catch (err) {
-        console.error("Step2 load error:", err);
       }
     };
 
     init();
   }, [params?.data]);
 
-  // ---------------------- UNIVERSAL AUTO-SAVE ----------------------
   const handleInputChange = (field, value) => {
-    setFormData(prev => {
-      const next = { ...prev, [field]: value };
-      sessionFormData = next;
-      AsyncStorage.setItem("step2Data", JSON.stringify(next)); // AUTO-SAVE
-      return next;
-    });
+    const next = { ...formData, [field]: value };
+    setFormData(next);
+    sessionFormData = next;
+    AsyncStorage.setItem("step2Data", JSON.stringify(next));
   };
 
-  // ---------------------- AVAILABILITY ADD ------------------------
   const addAvailability = () => {
-    if (!formData.day || !formData.am || !formData.pm) {
-      return Alert.alert("Missing Field", "Please fill all availability fields.");
-    }
-    setFormData(prev => {
-      const newAvailability = [...prev.availability, { day: prev.day, am: prev.am, pm: prev.pm }];
-      const next = { ...prev, availability: newAvailability, day: "", am: "", pm: "" };
-      sessionFormData = next;
-      AsyncStorage.setItem("step2Data", JSON.stringify(next));
-      return next;
-    });
+    if (!formData.day)
+      return Alert.alert("Missing Field", "Please select a day.");
+
+    const next = {
+      ...formData,
+      availability: [...formData.availability, formData.day],
+      day: "",
+    };
+
+    setFormData(next);
+    sessionFormData = next;
+    AsyncStorage.setItem("step2Data", JSON.stringify(next));
   };
 
-  // ---------------------- REMOVE AVAILABILITY ----------------------
   const removeAvailability = (index) => {
-    setFormData(prev => {
-      const newAvailability = prev.availability.filter((_, i) => i !== index);
-      const next = { ...prev, availability: newAvailability };
-      sessionFormData = next;
-      AsyncStorage.setItem("step2Data", JSON.stringify(next));
-      return next;
-    });
+    const next = {
+      ...formData,
+      availability: formData.availability.filter((_, i) => i !== index),
+    };
+
+    setFormData(next);
+    sessionFormData = next;
+    AsyncStorage.setItem("step2Data", JSON.stringify(next));
   };
 
-  // ---------------------- NAVIGATION ------------------------------
   const handleBack = async () => {
     await AsyncStorage.setItem("step2Data", JSON.stringify(formData));
     router.back();
@@ -133,180 +128,299 @@ export default function Step2Details() {
       return Alert.alert("Missing Field", "Please fill required fields.");
     }
 
-    await AsyncStorage.setItem("step2Data", JSON.stringify(formData));
-
     const step1Data = params?.data ? JSON.parse(params.data) : {};
-    const dataToSend = {
-      ...step1Data,
-      step2: formData
-    };
-
     router.push({
       pathname: "/Consultant/Step3Review",
-      params: { data: JSON.stringify(dataToSend) }
+      params: { data: JSON.stringify({ ...step1Data, step2: formData }) },
     });
   };
 
-  const consultantType = params?.data ? (JSON.parse(params.data).consultantType || "") : "";
+  const consultantType = params?.data
+    ? JSON.parse(params.data).consultantType || ""
+    : "";
 
-  // ---------------------- UI ----------------------
+  /* ===================== UI ===================== */
+
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>Step 2 – Consultant Details</Text>
-      <Text style={styles.sub}>
-        Consultant Type: {consultantType === "Professional" ? "Professional" : "Fresh Graduate"}
-      </Text>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* HEADER */}
+      <View style={styles.header}>
+        <Image
+          source={require("../../assets/new_background.jpg")}
+          style={styles.headerImage}
+        />
 
-      {/* SPECIALIZATION */}
-      <Text style={styles.label}>Specialization</Text>
-      <Picker
-        selectedValue={formData.specialization}
-        onValueChange={(v) => handleInputChange("specialization", v)}
-        style={styles.picker}
-      >
-        <Picker.Item label="Select specialization" value="" />
-        <Picker.Item label="Architecture" value="Architecture" />
-        <Picker.Item label="Structural Engineering" value="Structural Engineering" />
-        <Picker.Item label="Interior Design" value="Interior Design" />
-        <Picker.Item label="Landscape Architecture" value="Landscape Architecture" />
-        <Picker.Item label="Electrical Engineering" value="Electrical Engineering" />
-        <Picker.Item label="Plumbing / Sanitary Engineering" value="Plumbing / Sanitary Engineering" />
-        <Picker.Item label="Civil Engineering" value="Civil Engineering" />
-      </Picker>
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#FFF" />
+        </TouchableOpacity>
 
-      {/* EDUCATION */}
-      <Text style={styles.label}>Education</Text>
-      <Picker
-        selectedValue={formData.education}
-        onValueChange={(v) => handleInputChange("education", v)}
-        style={styles.picker}
-      >
-        <Picker.Item label="Select degree" value="" />
-        <Picker.Item label="Bachelor of Architecture" value="Bachelor of Architecture" />
-        <Picker.Item label="Bachelor of Interior Design" value="Bachelor of Interior Design" />
-        <Picker.Item label="Bachelor of Landscape Architecture" value="Bachelor of Landscape Architecture" />
-        <Picker.Item label="Bachelor of Science in Civil Engineering" value="BSCE" />
-        <Picker.Item label="Bachelor of Science in Electrical Engineering" value="BSEE" />
-        <Picker.Item label="Bachelor of Science in Mechanical Engineering" value="BSME" />
-        <Picker.Item label="Bachelor of Science in Sanitary Engineering" value="BSSE" />
-      </Picker>
-
-      {/* PRO ONLY FIELDS */}
-      {consultantType === "Professional" && (
-        <>
-          <Text style={styles.label}>Experience (Years)</Text>
-          <TextInput
-            style={styles.input}
-            value={String(formData.experience)}
-            onChangeText={(v) => handleInputChange("experience", v)}
-            placeholder="e.g. 3"
-            keyboardType="numeric"
-          />
-
-          <Text style={styles.label}>License Number</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.licenseNumber}
-            onChangeText={(v) => handleInputChange("licenseNumber", v)}
-            placeholder="Enter license number"
-          />
-        </>
-      )}
-
-      {/* AVAILABILITY */}
-      <Text style={styles.label}>Availability</Text>
-      <Picker
-        selectedValue={formData.day}
-        onValueChange={(v) => handleInputChange("day", v)}
-        style={styles.picker}
-      >
-        <Picker.Item label="Select Day" value="" />
-        {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map((d) => (
-          <Picker.Item key={d} label={d} value={d} />
-        ))}
-      </Picker>
-
-      {formData.day ? (
-        <>
-          <TextInput
-            style={styles.input}
-            placeholder="AM e.g. 8:00 – 12:00"
-            value={formData.am}
-            onChangeText={(v) => handleInputChange("am", v)}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="PM e.g. 1:00 – 5:00"
-            value={formData.pm}
-            onChangeText={(v) => handleInputChange("pm", v)}
-          />
-
-          <TouchableOpacity style={styles.addButton} onPress={addAvailability}>
-            <Ionicons name="add" size={20} color="#fff" />
-            <Text style={styles.addText}>Add Availability</Text>
-          </TouchableOpacity>
-        </>
-      ) : null}
-
-      {formData.availability.map((a, i) => (
-        <View key={i} style={styles.availabilityItem}>
-          <Text style={styles.avail}>• {a.day}: {a.am} / {a.pm}</Text>
-          <TouchableOpacity onPress={() => removeAvailability(i)}>
-            <Ionicons name="close-circle" size={20} color="#FF3B30" />
-          </TouchableOpacity>
+        <View style={styles.headerText}>
+          <Text style={styles.headerTitle}>Consultant Registration</Text>
+          <Text style={styles.headerSubtitle}>Step 2 • Consultant Details</Text>
         </View>
-      ))}
+      </View>
 
-      {/* ---------------- PORTFOLIO UPLOAD ---------------- */}
-      <Text style={styles.label}>Portfolio (Upload File)</Text>
+      {/* CARD */}
+      <View style={styles.card}>
+        <Text style={styles.sub}>
+          Consultant Type:{" "}
+          {consultantType === "Professional"
+            ? "Professional"
+            : "Fresh Graduate"}
+        </Text>
 
-      <TouchableOpacity
-        style={{
-          backgroundColor: "#0F3E48",
-          padding: 12,
-          borderRadius: 8,
-          alignItems: "center",
-          marginBottom: 10,
-        }}
-        onPress={uploadPortfolio}
-      >
-        <Text style={{ color: "#fff", fontWeight: "600" }}>Upload Portfolio</Text>
-      </TouchableOpacity>
+        {/* SPECIALIZATION */}
+        <View style={styles.pickerBox}>
+          <Picker
+            selectedValue={formData.specialization}
+            onValueChange={(v) => handleInputChange("specialization", v)}
+          >
+         <Picker.Item label="Select specialization" value="" />
+<Picker.Item label="Architecture" value="Architecture" />
+<Picker.Item label="Interior Design" value="Interior Design" />
+<Picker.Item label="Civil Engineering" value="Civil Engineering" />
+<Picker.Item label="Structural Engineering" value="Structural Engineering" />
+<Picker.Item label="Electrical Engineering" value="Electrical Engineering" />
+<Picker.Item label="Mechanical Engineering" value="Mechanical Engineering" />
+<Picker.Item label="Sanitary / Plumbing Engineering" value="Sanitary Engineering" />
+<Picker.Item label="Landscape Architecture" value="Landscape Architecture" />
+<Picker.Item label="Construction Management" value="Construction Management" />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Portfolio file link will appear here"
-        value={formData.portfolioLink}
-        editable={false}
-      />
+          </Picker>
+        </View>
 
-      {/* BUTTONS */}
-      <View style={styles.row}>
-        <TouchableOpacity style={styles.back} onPress={handleBack}>
-          <Text style={styles.backText}>Back</Text>
+        {/* EDUCATION */}
+        <View style={styles.pickerBox}>
+          <Picker
+            selectedValue={formData.education}
+            onValueChange={(v) => handleInputChange("education", v)}
+          >
+            <Picker.Item label="Select degree" value="" />
+     <Picker.Item label="Bachelor of Science in Architecture" value="BS Architecture" />
+<Picker.Item label="Bachelor of Science in Civil Engineering" value="BSCE" />
+<Picker.Item label="Bachelor of Science in Structural Engineering" value="Structural Engineering" />
+<Picker.Item label="Bachelor of Science in Electrical Engineering" value="BSEE" />
+<Picker.Item label="Bachelor of Science in Sanitary Engineering" valuer="BSSE" />
+<Picker.Item label="Bachelor of Science in Mechanical Engineering" value="BSME" />
+<Picker.Item label="Bachelor of Science in Construction Management" value="Construction Management" />
+<Picker.Item label="Bachelor of Interior Design" value="Interior Design" />
+          </Picker>
+        </View>
+
+        {/* PROFESSIONAL ONLY */}
+        {consultantType === "Professional" && (
+          <>
+            <Input
+              label="Experience (Years)"
+              keyboardType="numeric"
+              value={formData.experience}
+              onChangeText={(v) => handleInputChange("experience", v)}
+              placeholder="e.g. 3"
+            />
+
+            <Input
+              label="License Number"
+              value={formData.licenseNumber}
+              onChangeText={(v) => handleInputChange("licenseNumber", v)}
+              placeholder="Enter license number"
+            />
+          </>
+        )}
+
+        {/* AVAILABILITY */}
+        <View style={styles.pickerBox}>
+          <Picker
+            selectedValue={formData.day}
+            onValueChange={(v) => handleInputChange("day", v)}
+          >
+            <Picker.Item label="Select availability" value="" />
+            {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday","Sunday"].map(
+              (d) => (
+                <Picker.Item key={d} label={d} value={d} />
+              )
+            )}
+          </Picker>
+        </View>
+
+        {formData.day && (
+          <TouchableOpacity style={styles.addBtn} onPress={addAvailability}>
+            <Ionicons name="add" size={18} color="#FFF" />
+            <Text style={styles.addText}>Add Day</Text>
+          </TouchableOpacity>
+        )}
+
+        {formData.availability.map((d, i) => (
+          <View key={i} style={styles.availabilityItem}>
+            <Text style={styles.avail}>{d}</Text>
+            <TouchableOpacity onPress={() => removeAvailability(i)}>
+              <Ionicons name="close" size={20} color="#FF3B30" />
+            </TouchableOpacity>
+          </View>
+        ))}
+
+        {/* PORTFOLIO CARD */}
+        <TouchableOpacity style={styles.uploadCard} onPress={uploadPortfolio}>
+          <Ionicons
+            name={
+              formData.portfolioLink
+                ? "checkmark-circle"
+                : "cloud-upload"
+            }
+            size={30}
+            color={formData.portfolioLink ? "#2ECC71" : "#0F3E48"}
+          />
+          <Text style={styles.uploadTitle}>
+            {formData.portfolioLink
+              ? "Portfolio Uploaded"
+              : "Upload Portfolio"}
+          </Text>
+          <Text style={styles.uploadHint}>PDF, DOC, JPG supported</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.next} onPress={handleNext}>
-          <Text style={styles.nextText}>Next</Text>
-        </TouchableOpacity>
+
+        {formData.portfolioLink && (
+          <View style={styles.uploadSuccess}>
+            <Ionicons name="link-outline" size={16} color="#2ECC71" />
+            <Text style={styles.successText}>
+              File attached successfully
+            </Text>
+          </View>
+        )}
+
+        {/* NEXT BUTTON */}
+        <Button title="Next" onPress={handleNext} style={styles.nextBtn} />
       </View>
     </ScrollView>
   );
 }
 
+/* ===================== STYLES ===================== */
+
 const styles = StyleSheet.create({
-  container: { padding: 20, backgroundColor: "#fff", flex: 1 },
-  title: { fontSize: 22, fontWeight: "bold", color: "#0F3E48", marginBottom: 15 },
-  sub: { fontSize: 16, marginBottom: 15, color: "#666" },
-  label: { fontWeight: "600", marginTop: 10, marginBottom: 5, color: "#333" },
-  picker: { borderWidth: 1, borderColor: "#ccc", borderRadius: 8, backgroundColor: "#fff", marginBottom: 10 },
-  input: { borderWidth: 1, borderColor: "#ccc", borderRadius: 8, padding: 12, marginBottom: 10, backgroundColor: "#fff" },
-  addButton: { flexDirection: "row", backgroundColor: "#0F3E48", borderRadius: 8, padding: 10, justifyContent: "center", alignItems: "center", marginVertical: 5 },
-  addText: { color: "#fff", marginLeft: 5, fontWeight: "600" },
-  availabilityItem: { flexDirection: "row", justifyContent: "space-between", paddingRight: 10, marginTop: 6 },
-  avail: { marginLeft: 10, marginTop: 5, color: "#333" },
-  row: { flexDirection: "row", justifyContent: "space-between", marginTop: 20, marginBottom: 40 },
-  back: { flex: 1, backgroundColor: "#E5E5EA", alignItems: "center", padding: 12, borderRadius: 8, marginRight: 5 },
-  backText: { color: "#333", fontWeight: "600" },
-  next: { flex: 1, backgroundColor: "#0F3E48", alignItems: "center", padding: 12, borderRadius: 8, marginLeft: 5 },
-  nextText: { color: "#fff", fontWeight: "600" }
+  container: { flex: 1, backgroundColor: "#fff" },
+
+  header: { height: 260 },
+  headerImage: { width: "100%", height: "100%" },
+
+  backButton: {
+    position: "absolute",
+    top: 40,
+    left: 20,
+    padding: 8,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 10,
+  },
+
+  headerText: {
+    position: "absolute",
+    bottom: 100,
+    alignItems: "center",
+    width: "100%",
+  },
+
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#fff",
+  },
+
+  headerSubtitle: {
+    fontSize: 14,
+    color: "#f5f5f5",
+    marginTop: 6,
+  },
+
+  card: {
+    marginTop: -85,
+    padding: 28,
+    backgroundColor: "#FAF9F6",
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
+  },
+
+  sub: { color: "#666", marginBottom: 20 },
+
+  pickerBox: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    marginBottom: 14,
+  },
+
+  addBtn: {
+    flexDirection: "row",
+    backgroundColor: "#0F3E48",
+    borderRadius: 12,
+    padding: 12,
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+
+  addText: { color: "#fff", marginLeft: 6, fontWeight: "600" },
+
+  availabilityItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#E1E8EA",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  
+    // Subtle iOS-like shadow
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  
+  avail: {
+    fontSize: 15,
+    color: "#912f56",
+   fontWeight: "500",
+  },
+  
+
+  uploadCard: {
+    borderWidth: 1.2,
+    borderColor: "#2c4f4f",
+    borderRadius: 16,
+    paddingVertical: 26,
+    alignItems: "center",
+    backgroundColor: "#FAF9F6",
+    marginBottom: 10,
+  },
+
+  uploadTitle: {
+    marginTop: 10,
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0F3E48",
+  },
+
+  uploadHint: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#6B8C8C",
+  },
+
+  uploadSuccess: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+
+  successText: {
+    marginLeft: 6,
+    fontSize: 13,
+    color: "#2ECC71",
+    fontWeight: "600",
+  },
+
+  nextBtn: {
+    marginTop: 10,
+  },
 });

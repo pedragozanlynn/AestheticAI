@@ -19,12 +19,12 @@ export default function Button({ title, onPress, style, disabled }) {
 
 const styles = StyleSheet.create({
   button: {
-    backgroundColor: "#111827",
+    backgroundColor: "#3fa796",   // ✅ bright teal-green
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 12,
+    marginTop: 5,
   },
   text: {
     color: "#fff",

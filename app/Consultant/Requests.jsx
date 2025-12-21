@@ -30,9 +30,7 @@ export default function Requests() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  /** -------------------------------------------
-   * 🔥 LOAD CONSULTANT PROFILE FROM ASYNC STORAGE
-   * ------------------------------------------- */
+  // Load consultant profile
   useEffect(() => {
     const loadProfile = async () => {
       try {
@@ -40,46 +38,33 @@ export default function Requests() {
         const profileKey = keys.find((k) =>
           k.startsWith("aestheticai:user-profile:")
         );
-
         if (!profileKey) return;
-
         const stored = await AsyncStorage.getItem(profileKey);
         const parsed = JSON.parse(stored);
-
-        console.log("👤 Logged Consultant UID:", parsed.uid);
-
         setConsultant(parsed);
       } catch (err) {
         console.log("❌ Error loading consultant profile:", err);
       }
     };
-
     loadProfile();
   }, []);
 
-  /** -------------------------------------------
-   * 🔥 FETCH REQUESTS FOR THIS CONSULTANT
-   * ------------------------------------------- */
+  // Fetch requests for this consultant
   useEffect(() => {
     if (!consultant?.uid) return;
-
     const fetchRequests = async () => {
       try {
         const q = query(
           collection(db, "appointments"),
           where("consultantId", "==", consultant.uid)
         );
-
         const snap = await getDocs(q);
         const results = [];
-
         for (const docItem of snap.docs) {
           const appointment = { id: docItem.id, ...docItem.data() };
-
           // Fetch user data
           const userRef = doc(db, "users", appointment.userId);
           const userSnap = await getDoc(userRef);
-
           if (userSnap.exists()) {
             const u = userSnap.data();
             appointment.userName =
@@ -91,10 +76,8 @@ export default function Requests() {
             appointment.userName = "Unknown User";
             appointment.userEmail = "N/A";
           }
-
           results.push(appointment);
         }
-
         setRequests(results);
       } catch (err) {
         console.log("❌ Fetch request error:", err);
@@ -102,57 +85,34 @@ export default function Requests() {
         setLoading(false);
       }
     };
-
     fetchRequests();
   }, [consultant]);
 
-  /** -------------------------------------------
-   * 🔥 ACCEPT REQUEST + ENSURE CHAT ROOM EXISTS
-   * ------------------------------------------- */
+  // Accept request
   const acceptRequest = async (item) => {
     try {
-      // Mark appointment accepted
-      await updateDoc(doc(db, "appointments", item.id), {
-        status: "accepted",
-      });
-
-      // Create or reuse chat room using the FIXED chatService
+      await updateDoc(doc(db, "appointments", item.id), { status: "accepted" });
       const roomId = await ensureChatRoom(
-        `${item.userId}_${consultant.uid}`, // consistent room ID
+        `${item.userId}_${consultant.uid}`,
         item.userId,
         consultant.uid,
         item.id
       );
-
-      // Save chatRoomId inside appointment
-      await updateDoc(doc(db, "appointments", item.id), {
-        chatRoomId: roomId,
-      });
-
-      // Update UI
       setRequests((prev) =>
         prev.map((r) =>
-          r.id === item.id
-            ? { ...r, status: "accepted", chatRoomId: roomId }
-            : r
+          r.id === item.id ? { ...r, status: "accepted", chatRoomId: roomId } : r
         )
       );
-
       Alert.alert("Success", "Appointment accepted!");
     } catch (err) {
       Alert.alert("Error", err.message);
     }
   };
 
-  /** -------------------------------------------
-   * 🔥 DECLINE REQUEST
-   * ------------------------------------------- */
+  // Decline request
   const declineRequest = async (item) => {
     try {
-      await updateDoc(doc(db, "appointments", item.id), {
-        status: "declined",
-      });
-
+      await updateDoc(doc(db, "appointments", item.id), { status: "declined" });
       setRequests((prev) =>
         prev.map((r) =>
           r.id === item.id ? { ...r, status: "declined" } : r
@@ -163,20 +123,27 @@ export default function Requests() {
     }
   };
 
-  /** -------------------------------------------
-   * 🔥 OPEN CHAT (SAFE — chatRoom already ensured)
-   * ------------------------------------------- */
+  // Open chat
   const openChat = async (item) => {
     try {
-      if (!item.chatRoomId) {
-        Alert.alert("Error", "Chat room not found.");
-        return;
+      let roomId = item.chatRoomId;
+      if (!roomId) {
+        roomId = await ensureChatRoom(
+          `${item.userId}_${consultant.uid}`,
+          item.userId,
+          consultant.uid,
+          item.id
+        );
+        setRequests((prev) =>
+          prev.map((r) =>
+            r.id === item.id ? { ...r, chatRoomId: roomId } : r
+          )
+        );
       }
-
       router.push({
         pathname: "/Consultant/ChatRoom",
         params: {
-          roomId: item.chatRoomId,
+          roomId,
           userId: item.userId,
           appointmentId: item.id,
         },
@@ -186,53 +153,64 @@ export default function Requests() {
     }
   };
 
-  /** -------------------------------------------
-   * 🔥 EACH REQUEST CARD UI
-   * ------------------------------------------- */
+  // Render each request card
   const renderItem = ({ item }) => (
     <View style={styles.card}>
-      <Text style={styles.clientName}>👤 {item.userName}</Text>
-      <Text style={styles.detail}>📧 {item.userEmail}</Text>
-      <Text style={styles.detail}>📅 {item.date}</Text>
-      <Text style={styles.detail}>⏰ {item.time}</Text>
-      <Text style={styles.detail}>📝 {item.notes}</Text>
+      {/* ✅ Top row: name + status */}
+      <View style={styles.topRow}>
+        <Text style={styles.clientName}>{item.userName}</Text>
+        <Text style={styles.status(item.status)}>{item.status}</Text>
+      </View>
 
-      <Text style={styles.status(item.status)}>{item.status}</Text>
-
-      {/* PENDING */}
-      {item.status === "pending" && (
-        <View style={styles.row}>
-          <TouchableOpacity
-            style={[styles.btn, styles.acceptBtn]}
-            onPress={() => acceptRequest(item)}
-          >
-            <Text style={styles.btnTextLight}>Accept</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.btn, styles.cancelBtn]}
-            onPress={() => declineRequest(item)}
-          >
-            <Text style={styles.btnTextDark}>Decline</Text>
-          </TouchableOpacity>
+      {/* ✅ Two-column layout */}
+      <View style={styles.detailsRow}>
+        {/* Left side: details */}
+        <View style={styles.detailsBlock}>
+          <Text style={styles.detail}>{item.userEmail}</Text>
+          <Text style={styles.detail}>{item.date}</Text>
+          <Text style={styles.detail}>{item.time}</Text>
+          <Text style={styles.detail}>{item.notes}</Text>
         </View>
-      )}
 
-      {/* ACCEPTED → OPEN CHAT */}
-      {item.status === "accepted" && item.chatRoomId && (
-        <TouchableOpacity
-          style={[styles.btn, styles.acceptBtn, { marginTop: 10 }]}
-          onPress={() => openChat(item)}
-        >
-          <Text style={styles.btnTextLight}>Open Chat</Text>
-        </TouchableOpacity>
-      )}
+        {/* Right side: actions */}
+        <View style={styles.statusBlock}>
+          {item.status === "pending" && (
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={[styles.btn, styles.acceptBtn]}
+                onPress={() => acceptRequest(item)}
+              >
+                <Text style={styles.btnTextLight}>Accept</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.btn, styles.cancelBtn]}
+                onPress={() => declineRequest(item)}
+              >
+                <Text style={styles.btnTextDark}>Decline</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {item.status === "accepted" && (
+            <TouchableOpacity
+              style={[styles.btn, styles.acceptBtn, { marginTop: 6 }]}
+              onPress={() => openChat(item)}
+            >
+              <Text style={styles.btnTextLight}>Open Chat</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
     </View>
   );
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Consultation Requests</Text>
+      {/* ✅ Header with subtitle */}
+      <View style={styles.headerWrap}>
+        <Text style={styles.header}>Consultation Requests</Text>
+        <Text style={styles.subHeader}>Manage and review your latest appointments</Text>
+      </View>
 
       {loading ? (
         <ActivityIndicator size="large" color="#0F3E48" />
@@ -246,7 +224,6 @@ export default function Requests() {
           contentContainerStyle={{ paddingBottom: 120 }}
         />
       )}
-
       <BottomNavbar role="consultant" />
     </View>
   );
@@ -256,52 +233,165 @@ export default function Requests() {
  *              STYLES
  * ------------------------------------------ */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff", padding: 20 },
+  container: { 
+    flex: 1, 
+    backgroundColor: "#F3F9FA", 
+  },
+
+  headerWrap: {
+    alignItems: "center",
+    backgroundColor: "#01579B",
+    paddingVertical: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+    width: "100%",
+    paddingTop: 60,
+  },
+
   header: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "900",
-    color: "#0F3E48",
-    marginBottom: 15,
+    color: "#FFFFFF",
+    letterSpacing: 0.8,
+    textAlign: "center",
   },
+
+  subHeader: {
+    fontSize: 14,
+    color: "#E0F7FA",
+    marginTop: 4,
+    fontStyle: "italic",
+    letterSpacing: 0.3,
+    textAlign: "center",
+  },
+
   card: {
-    backgroundColor: "#F8F9FA",
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: "#ddd",
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 20,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginTop: 20,
+    marginBottom: 10,
+    marginHorizontal: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+    borderLeftWidth: 3,
+    borderLeftColor: "#912f56", 
   },
-  clientName: { fontSize: 18, fontWeight: "700", color: "#0F3E48" },
-  detail: { fontSize: 15, marginTop: 4, color: "#333" },
+
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "space-between", // name left, status right
+    alignItems: "center",
+    marginBottom: 6,
+  },
+
+  clientName: { 
+    fontSize: 16,
+    fontWeight: "700", 
+    color: "#01579B", 
+    letterSpacing: 0.4,
+  },
+
+  detailsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+
+  detailsBlock: {
+    flex: 1,
+  },
+
+  statusBlock: {
+    alignItems: "flex-end",
+    marginLeft: 12,
+  },
+
+  actionRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 6,
+  },
+
+  btn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+
+  acceptBtn: {
+    backgroundColor: "#2c4f4f",
+    marginTop: 40,
+  },
+
+  cancelBtn: {
+    borderWidth: 1,
+    borderColor: "#912f56",
+    backgroundColor: "#fff",
+    marginTop: 40,
+
+  },
+
+  btnTextLight: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 12,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+
+  btnTextDark: {
+    color: "#912f56",
+    fontWeight: "700",
+    fontSize: 12,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+
+  detail: { 
+    fontSize: 13,
+    marginTop: 2, 
+    color: "#455A64", 
+    lineHeight: 18,
+    fontWeight: "500",
+  },
 
   status: (s) => ({
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "700",
-    marginTop: 8,
+    textTransform: "capitalize",
+    paddingVertical: 2,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    overflow: "hidden",
+    backgroundColor:
+      s === "pending"
+        ? "#FFF3CD"
+        : s === "accepted"
+        ? "#D1F2EB"
+        : "#F8D7DA",
     color:
       s === "pending"
         ? "#D99700"
         : s === "accepted"
-        ? "#0F3E48"
+        ? "#0F766E"
         : "#B00020",
+    letterSpacing: 0.3,
   }),
 
-  row: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 10,
+  empty: { 
+    textAlign: "center", 
+    marginTop: 20, 
+    color: "#90A4AE", 
+    fontStyle: "italic",
+    fontSize: 14,
   },
-
-  btn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  acceptBtn: { backgroundColor: "#0F3E48" },
-  cancelBtn: { borderWidth: 1, borderColor: "#B00020" },
-  btnTextLight: { color: "#fff", fontWeight: "700" },
-  btnTextDark: { color: "#B00020", fontWeight: "700" },
-
-  empty: { textAlign: "center", marginTop: 20, color: "#777" },
 });

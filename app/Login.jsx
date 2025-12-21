@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc, onSnapshot } from "firebase/firestore";
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Image,
@@ -11,10 +11,12 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { auth, db } from "../config/firebase";
+import Button from "./components/Button"; // ✅ custom Button imported
 import Input from "./components/Input";
+
 
 const ROLE_KEY_PREFIX = "aestheticai:user-role:";
 const PROFILE_KEY_PREFIX = "aestheticai:user-profile:";
@@ -129,6 +131,14 @@ export default function Login() {
         );
         return;
       }
+     // Save name and gender for Profile screen
+if (profile.name) {
+  await AsyncStorage.setItem("user:name", profile.name);
+}
+if (profile.gender) {
+  await AsyncStorage.setItem("user:gender", profile.gender); // "male" or "female"
+}
+
 
       if (initialRole === "consultant") {
         if (profile.status === "pending") {
@@ -190,16 +200,23 @@ export default function Login() {
 
   return (
     <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-      <View style={styles.screen}>
+      <View style={styles.header}>
+        <Image
+          source={require("../assets/new_background.jpg")}
+          style={styles.image}
+        />
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={26} color="#0F3E48" />
+          <Ionicons name="arrow-back" size={26} color="#FFFFFF" />
         </TouchableOpacity>
 
-        <Image source={require("../assets/login.png")} style={styles.image} />
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.title}>Welcome Back</Text>
+          <Text style={styles.subtitle}>Sign in to continue to your account</Text>
+        </View>
+      </View>
 
-        <Text style={styles.title}>Welcome Back</Text>
-        <Text style={styles.subtitle}>Sign in to continue to your account</Text>
-
+      <View style={styles.content}>
+        <Text style={styles.sectionLabel}>Account Information</Text>
         <Input
           placeholder="Email"
           autoCapitalize="none"
@@ -224,9 +241,8 @@ export default function Login() {
           <Text style={styles.forgotText}>Forgot Password?</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={login} style={styles.loginButton}>
-          <Text style={styles.loginButtonText}>Login</Text>
-        </TouchableOpacity>
+        {/* ✅ Custom Button */}
+        <Button title="Login" onPress={login} style={styles.loginButton} />
 
         <View style={styles.dividerContainer}>
           <View style={styles.line} />
@@ -249,21 +265,99 @@ export default function Login() {
   );
 }
 
-// --- Styles same as original ---
 const styles = StyleSheet.create({
-  screen: { flex: 1, justifyContent: "center", padding: 28, backgroundColor: "#F5F9FA" },
-  backButton: { position: "absolute", top: 70, left: 20, padding: 8 },
-  image: { top: 20, width: 150, height: 130, alignSelf: "center", marginBottom: 20, borderRadius: 80 },
-  title: { fontSize: 34, fontWeight: "800", textAlign: "center", color: "#0F3E48", marginBottom: 6 },
-  subtitle: { fontSize: 16, textAlign: "center", color: "#6A7A7C", marginBottom: 30 },
-  input: { width: "100%", backgroundColor: "#FFFFFF", paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, borderColor: "#E2E8EA", fontSize: 15, marginBottom: 15 },
-  forgotContainer: { alignSelf: "flex-start", marginBottom: 15, marginStart: 10 },
-  forgotText: { color: "#0F3E48", fontWeight: "600" },
-  loginButton: { backgroundColor: "#0F3E48", paddingVertical: 16, borderRadius: 14, alignItems: "center", marginTop: 5 },
-  loginButtonText: { color: "#fff", fontSize: 17, fontWeight: "700" },
-  dividerContainer: { flexDirection: "row", alignItems: "center", marginTop: 20 },
-  line: { flex: 1, height: 1, backgroundColor: "#ddd" },
-  orText: { marginHorizontal: 10, color: "#777" },
-  footerLink: { marginTop: 30 },
-  footer: { textAlign: "center", color: "#0F3E48", fontWeight: "600" }
+  header: { width: "100%", height: 360, position: "relative" },
+  image: { width: "100%", height: "100%", resizeMode: "cover" },
+  backButton: {
+    position: "absolute",
+    top: 60,
+    left: 20,
+    padding: 6,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 10,
+  },
+  headerTextContainer: {
+    position: "absolute",
+    top: "50%",
+    left: 0,
+    right: 0,
+    transform: [{ translateY: -30 }],
+    alignItems: "center",
+  },
+  title: {
+    fontSize: 30,
+    fontWeight: "800",
+    color: "#fff",
+    textAlign: "center",
+    letterSpacing: 0.8,
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 5,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: "#f5f5f5",
+    textAlign: "center",
+    fontWeight: "500",
+    marginTop: 6,
+    letterSpacing: 0.4,
+    textShadowColor: "rgba(0,0,0,0.2)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  content: {
+    flex: 1,
+    paddingTop: 32,
+    marginTop: -40,
+    paddingHorizontal: 50,
+    backgroundColor: "#faf9f6",
+    borderTopLeftRadius: 50,
+    borderTopRightRadius: 50,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  sectionLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#2c4f4f",
+    marginBottom: 10,
+    marginLeft: 6,
+    letterSpacing: 0.3,
+    paddingBottom: 2,
+  },
+  input: {
+    width: "100%",
+    backgroundColor: "#fff",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#dce3ea",
+    fontSize: 14,
+    marginBottom: 16,
+    color: "#2c3e50",
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  forgotContainer: {
+    alignSelf: "flex-start",
+    left: 10,
+    marginBottom: 5,
+  },
+  forgotText: { color: "#912f56", fontWeight: "600", fontSize: 13 },
+  dividerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 28,
+    marginBottom: 16,
+  },
+  line: { flex: 1, height: 1, backgroundColor: "#d0d7d4" },
+  orText: { marginHorizontal: 10, color: "#5f7268", fontWeight: "600", fontSize: 12 },
+  footerLink: { marginTop: 15 },
+  footer: { textAlign: "center", color: "#2c4f4f", fontWeight: "600", fontSize: 14 },
+ 
 });

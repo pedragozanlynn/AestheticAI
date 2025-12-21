@@ -1,10 +1,11 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import React, { useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
+  Image,
   Linking,
   ScrollView,
   StyleSheet,
@@ -13,6 +14,7 @@ import {
   View
 } from "react-native";
 import { auth, db } from "../../config/firebase";
+import Button from "../components/Button"; // adjust path kung saan mo nilagay
 
 export default function Step3Review() {
   const router = useRouter();
@@ -46,10 +48,7 @@ export default function Step3Review() {
         experience: step2.experience || "",
         licenseNumber: step2.licenseNumber || "",
         availability: step2.availability,
-
-        // ⭐ Correctly save portfolio URL from Step 2
         portfolioURL: step2.portfolioLink || null,
-
         submittedAt: serverTimestamp(),
         status: "pending"
       });
@@ -66,79 +65,229 @@ export default function Step3Review() {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>Step 3 – Review Information</Text>
-
-      <Text style={styles.section}>Personal Information</Text>
-      <Text>Full Name: {data.fullName}</Text>
-      <Text>Email: {data.email}</Text>
-      <Text>Address: {data.address}</Text>
-      <Text>Gender: {data.gender}</Text>
-
-      <Text style={styles.section}>Consultant Details</Text>
-      <Text>Type: {data.consultantType}</Text>
-      <Text>Specialization: {step2.specialization}</Text>
-      <Text>Education: {step2.education}</Text>
-
-      {data.consultantType === "professional" && (
-        <>
-          <Text>Experience: {step2.experience} years</Text>
-          <Text>License Number: {step2.licenseNumber}</Text>
-        </>
-      )}
-
-      <Text style={styles.section}>Availability</Text>
-      {step2.availability.length > 0 ? (
-        step2.availability.map((a, i) => (
-          <Text key={i}>• {a.day}: {a.am} / {a.pm}</Text>
-        ))
-      ) : (
-        <Text>Not specified</Text>
-      )}
-
-      {/* ⭐ PORTFOLIO DISPLAY UPDATED */}
-      <Text style={styles.section}>Portfolio</Text>
-
-      {step2.portfolioLink ? (
-        <Text
-          style={styles.link}
-          onPress={() => Linking.openURL(step2.portfolioLink)}
-        >
-          📎 View Uploaded Portfolio File
-        </Text>
-      ) : (
-        <Text>No portfolio file uploaded</Text>
-      )}
-
-      <View style={styles.row}>
-        <TouchableOpacity
-          style={styles.back}
-          onPress={() => router.back()}
-          disabled={loading}
-        >
-          <Text>Back</Text>
+      {/* Header with image and back button */}
+      <View style={styles.header}>
+        <Image
+          source={require("../../assets/new_background.jpg")}
+          style={styles.image}
+        />
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={26} color="#FFFFFF" />
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.submit, loading && { opacity: 0.7 }]}
-          onPress={handleSubmit}
-          disabled={loading}
-        >
-          {loading ? <ActivityIndicator color="#fff" /> : (
-            <Text style={styles.submitText}>Submit</Text>
-          )}
-        </TouchableOpacity>
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.headerTitle}>Consultant Registration</Text>
+          <Text style={styles.headerSubtitle}>Step 3 – Review Information</Text>
+        </View>
       </View>
+
+      <View style={styles.content}>
+  {/* Personal Info */}
+  <View style={styles.card}>
+    <Text style={styles.section}>Personal Information</Text>
+    <View style={styles.infoRow}>
+      <Ionicons name="person" size={20} color="#912f56" style={styles.icon}/>
+      <Text style={styles.label}>Full Name</Text>
+      <Text style={styles.value}>{data.fullName}</Text>
+    </View>
+    <View style={styles.infoRow}>
+      <Ionicons name="mail" size={20} color="#912f56" style={styles.icon}/>
+      <Text style={styles.label}>Email</Text>
+      <Text style={styles.value}>{data.email}</Text>
+    </View>
+    <View style={styles.infoRow}>
+      <Ionicons name="home" size={20} color="#912f56" style={styles.icon}/>
+      <Text style={styles.label}>Address</Text>
+      <Text style={styles.value}>{data.address}</Text>
+    </View>
+    <View style={styles.infoRow}>
+      <Ionicons name="male-female" size={20} color="#912f56" style={styles.icon}/>
+      <Text style={styles.label}>Gender</Text>
+      <Text style={styles.value}>{data.gender}</Text>
+    </View>
+  </View>
+
+  {/* Consultant Details */}
+  <View style={styles.card}>
+    <Text style={styles.section}>Consultant Details</Text>
+    <View style={styles.infoRow}>
+      <Ionicons name="briefcase" size={20} color="#912f56" style={styles.icon}/>
+      <Text style={styles.label}>Type</Text>
+      <Text style={styles.value}>{data.consultantType}</Text>
+    </View>
+    <View style={styles.infoRow}>
+      <Ionicons name="construct" size={20} color="#912f56" style={styles.icon}/>
+      <Text style={styles.label}>Specialization</Text>
+      <Text style={styles.value}>{step2.specialization}</Text>
+    </View>
+    <View style={styles.infoRow}>
+      <Ionicons name="school" size={20} color="#912f56"style={styles.icon}/>
+      <Text style={styles.label}>Education</Text>
+      <Text style={styles.value}>{step2.education}</Text>
+    </View>
+    {data.consultantType === "Professional" && (
+      <>
+        <View style={styles.infoRow}>
+          <Ionicons name="time" size={20} color="#912f56"style={styles.icon}/>
+          <Text style={styles.label}>Experience</Text>
+          <Text style={styles.value}>{step2.experience} years</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Ionicons name="card" size={20} color="#912f56"style={styles.icon}/>
+          <Text style={styles.label}>License Number</Text>
+          <Text style={styles.value}>{step2.licenseNumber}</Text>
+        </View>
+      </>
+    )}
+  </View>
+
+  {/* Availability */}
+  <View style={styles.card}>
+    <Text style={styles.section}>Availability</Text>
+    {step2.availability && step2.availability.length > 0 ? (
+      step2.availability.map((day, i) => (
+        <View key={i} style={styles.infoRow}>
+          
+          <Ionicons name="calendar" size={20} color="#912f56" style={styles.icon}/>
+          <Text style={styles.label}>Day</Text>
+          <Text style={styles.value}>{day}</Text>
+        </View>
+      ))
+    ) : (
+      <Text style={styles.value}>Not specified</Text>
+    )}
+  </View>
+
+  <View style={styles.card}>
+  <Text style={styles.section}>Portfolio</Text>
+  {step2.portfolioLink ? (
+    <TouchableOpacity style={styles.portfolioButton} onPress={() => Linking.openURL(step2.portfolioLink)}>
+      <Ionicons name="document-text" size={22} color="#fff" style={{ marginRight: 8 }}/>
+      <Text style={styles.portfolioButtonText}>Open Portfolio File</Text>
+    </TouchableOpacity>
+  ) : (
+    <Text style={styles.value}>No portfolio file uploaded</Text>
+  )}
+</View>
+
+  <Button
+  title="Submit"
+  type="primary"
+  onPress={handleSubmit}
+  loading={loading}
+/>
+</View>
+
+
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, backgroundColor: "#fff" },
-  title: { fontSize: 22, fontWeight: "bold", color: "#0F3E48", marginBottom: 15 },
-  section: { fontSize: 18, marginTop: 15, marginBottom: 8, fontWeight: "600" },
-  row: { flexDirection: "row", justifyContent: "space-between", marginTop: 20 },
-  back: { flex: 1, backgroundColor: "#ccc", alignItems: "center", padding: 12, borderRadius: 8, marginRight: 5 },
-  submit: { flex: 1, backgroundColor: "#0F3E48", alignItems: "center", padding: 12, borderRadius: 8, marginLeft: 5 },
-  submitText: { color: "#fff", fontWeight: "600" },
-  link: { color: "#0F3E48", textDecorationLine: "underline", marginVertical: 5 }
+  container: { flex: 1, backgroundColor: "#fff" },
+
+  header: { width: "100%", height: 250, position: "relative" },
+  image: { width: "100%", height: "100%", resizeMode: "cover" },
+  backButton: {
+    position: "absolute",
+    top: 40,
+    left: 20,
+    padding: 6,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 10,
+  },
+  headerTextContainer: {
+    position: "absolute",
+    top: "40%",
+    left: 0,
+    right: 0,
+    transform: [{ translateY: -20 }],
+    alignItems: "center",
+  },
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#fff",
+    textAlign: "center",
+    letterSpacing: 0.8,
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 5,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: "#f5f5f5",
+    textAlign: "center",
+    fontWeight: "500",
+    marginTop: 6,
+    letterSpacing: 0.4,
+    textShadowColor: "rgba(0,0,0,0.2)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+
+  content: {
+    flex: 1,
+    paddingHorizontal: 32,
+    paddingTop: 32,
+    marginTop: -60,
+    backgroundColor: "#faf9f6",
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    marginBottom: 50,
+  },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E1E8EA",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  section: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F3E48",
+    marginBottom: 12,
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  icon: { marginRight: 8 },
+  label: { fontSize: 14, color: "#666", flex: 1 },
+  value: { 
+    fontSize: 14, 
+    color: "#4A4A4A",   // medium gray, readable pero hindi matingkad
+    fontWeight: "400", 
+    flex: 1, 
+    textAlign: "right" 
+  },
+    link: { color: "#0F3E48", textDecorationLine: "underline", fontWeight: "600" },
+  portfolioButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#0F3E48",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  portfolioButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+ 
 });

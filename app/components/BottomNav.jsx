@@ -27,7 +27,7 @@ export default function BottomNavbar({
   const userTabs = [
     { name: "Home", icon: "home", routePath: "/User/Home" },
     { name: "AI Designer", icon: "color-palette", routePath: "/User/AIDesigner" },
-    { name: "Consultation", icon: "chatbubbles", routePath: "/User/Consultation" },
+    { name: "Consultants", icon: "chatbubbles", routePath: "/User/Consultants" },
     { name: "Projects", icon: "albums", routePath: "/User/Projects" },
     { name: "Profile", icon: "person", routePath: "/User/Profile" },
   ];
@@ -36,7 +36,7 @@ export default function BottomNavbar({
   //  CONSULTANT NAVIGATION TABS
   // ---------------------------
   const consultantTabs = [
-    { name: "Homepage", icon: "grid", routePath: "/Consultant/Homepage" },
+    { name: "Homepage", icon: "home", routePath: "/Consultant/Homepage" },
     { name: "Requests", icon: "people", routePath: "/Consultant/Requests" },
     { name: "My Clients", icon: "chatbubble", routePath: "/Consultant/ChatList" },
     { name: "Earnings", icon: "wallet", routePath: "/Consultant/EarningsScreen" },
@@ -47,7 +47,7 @@ export default function BottomNavbar({
   //  ADMIN NAVIGATION TABS
   // ---------------------------
   const adminTabs = [
-    { name: "Dashboard", icon: "speedometer", routePath: "/Admin/Dashboard" },
+    { name: "Home", icon: "speedometer", routePath: "/Admin/Dashboard" },
     { name: "Withdrawals", icon: "cash", routePath: "/Admin/Withdrawals" },
     { name: "Consultants", icon: "briefcase", routePath: "/Admin/Consultants" },
     { name: "Subscription", icon: "wallet", routePath: "/Admin/Subscription" },

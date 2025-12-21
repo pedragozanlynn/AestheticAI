@@ -132,22 +132,24 @@ export default function ChatRoom() {
     setMessages,
   });
 
-  // MARK AS COMPLETE
-  const handleMarkComplete = async () => {
-    if (!roomId || !consultant?.id) return;
+ // MARK AS COMPLETE
+const handleMarkComplete = async () => {
+  if (!roomId || !consultant?.id) return;
 
-    try {
-      const roomRef = doc(db, "chatRooms", roomId);
-      await updateDoc(roomRef, {
-        status: "completed",
-        completedAt: new Date(),
-      });
-      Alert.alert("Success", "This chat has been marked as complete.");
-    } catch (err) {
-      console.error("Error marking complete:", err);
-      Alert.alert("Error", "Failed to mark chat as complete.");
-    }
-  };
+  try {
+    const roomRef = doc(db, "chatRooms", roomId);
+    await updateDoc(roomRef, {
+      status: "completed",
+      completedAt: new Date(),
+    });
+
+    console.log("✅ Chat marked as complete by consultant:", roomId); // <-- LOG HERE
+    Alert.alert("Success", "This chat has been marked as complete.");
+  } catch (err) {
+    console.error("Error marking complete:", err);
+    Alert.alert("Error", "Failed to mark chat as complete.");
+  }
+};
 
   // HANDLERS
   const handleSend = async () => {

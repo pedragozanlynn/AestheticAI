@@ -18,7 +18,7 @@ import Requests from "./app/Consultant/Requests";
 
 // 🏠 User Main Screens
 import AIDesigner from "./app/User/AIDesigner";
-import Consultation from "./app/User/Consultation";
+import Consultants from "./app/User/Consultants";
 import Home from "./app/User/Home";
 import Profile from "./app/User/Profile";
 import Projects from "./app/User/Projects";
@@ -29,7 +29,6 @@ import UpgradePayment from "./app/User/UpgradePayment";
 
 // 🛡 Admin Screen
 import ConsultantDetails from "./app/Admin/ConsultantDetails";
-import Consultants from "./app/Admin/Consultants";
 import Dashboard from "./app/Admin/Dashboard";
 import Ratings from "./app/Admin/Ratings";
 import Subscription from "./app/Admin/Subscription";
@@ -64,7 +63,7 @@ export default function App() {
         {/* 🏠 User App */}
         <Stack.Screen name="Home" component={Home} />
         <Stack.Screen name="AIDesigner" component={AIDesigner} />
-        <Stack.Screen name="Consultation" component={Consultation} />
+        <Stack.Screen name="Consultants" component={Consultants} />
         <Stack.Screen name="Projects" component={Projects} />
         <Stack.Screen name="Profile" component={Profile} />
 
