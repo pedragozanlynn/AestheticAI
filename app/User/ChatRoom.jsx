@@ -1,10 +1,17 @@
-// app/(User)/ChatRoom.jsx
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams } from "expo-router";
-import { doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  doc,
+  onSnapshot,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+} from "firebase/firestore";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -14,89 +21,134 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
+
 import { db } from "../../config/firebase";
 import { listenToMessages, markUserChatAsRead } from "../../services/chatService";
+import { pickFile } from "../../services/fileUploadService";
 import { handleUnsendMessage } from "../../services/handleUnsendMessage";
 import { useSendMessage } from "../../services/useSendMessage";
 import RatingModal from "../components/RatingModal";
 
+/* ================= ACTIVE STATUS FORMAT ================= */
+const formatActiveStatus = (isOnline, lastSeen) => {
+  if (isOnline) return "Active now";
+  if (!lastSeen?.toDate) return "Offline";
+
+  const mins = Math.floor((Date.now() - lastSeen.toDate()) / 60000);
+  if (mins < 1) return "Active 1 minute ago";
+  if (mins < 60) return `Active ${mins} minutes ago`;
+
+  const hrs = Math.floor(mins / 60);
+  return `Active ${hrs} hour${hrs > 1 ? "s" : ""} ago`;
+};
+
 export default function ChatRoom() {
-  const { roomId: _roomId, userId, consultantId } = useLocalSearchParams();
-  const [roomId, setRoomId] = useState(_roomId || `${userId}_${consultantId}`);
+  const { roomId, userId, consultantId } = useLocalSearchParams();
+
   const [user, setUser] = useState(null);
+  const [consultant, setConsultant] = useState(null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
-  const [typing, setTyping] = useState(false);
   const [ratingModalVisible, setRatingModalVisible] = useState(false);
 
-  // Image modal
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [modalImageUri, setModalImageUri] = useState(null);
 
+  const [isChatLocked, setIsChatLocked] = useState(false); // ✅ ADDED
+
   const flatListRef = useRef(null);
 
-  // --- Load user profile
+  /* ================= LOAD USER ================= */
   useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        const keys = await AsyncStorage.getAllKeys();
-        const profileKey = keys.find(
-          (k) => k.startsWith("aestheticai:client-profile:") || k.startsWith("aestheticai:user-profile:")
-        );
-        if (!profileKey) return;
+    const loadUser = async () => {
+      const keys = await AsyncStorage.getAllKeys();
+      const key = keys.find((k) =>
+        k.startsWith("aestheticai:user-profile:")
+      );
+      if (!key) return;
 
-        const raw = await AsyncStorage.getItem(profileKey);
-        if (!raw) return;
+      const raw = await AsyncStorage.getItem(key);
+      if (!raw) return;
 
-        const parsed = JSON.parse(raw);
-        setUser({ ...parsed, uid: parsed.uid || parsed.userId || parsed.id });
-      } catch (err) {
-        console.log("❌ Failed to load user profile:", err);
-      }
+      const parsed = JSON.parse(raw);
+      setUser({ ...parsed, uid: parsed.uid });
     };
-    loadProfile();
+    loadUser();
   }, []);
 
+  /* ================= LOAD CONSULTANT ================= */
+  useEffect(() => {
+    if (!consultantId) return;
+
+    const unsub = onSnapshot(doc(db, "consultants", consultantId), (snap) => {
+      if (snap.exists()) setConsultant(snap.data());
+    });
+
+    return () => unsub();
+  }, [consultantId]);
+
+  /* ================= ENSURE CHAT ROOM ================= */
   useEffect(() => {
     if (!roomId || !userId || !consultantId) return;
-  
-    const chatRoomRef = doc(db, "chatRooms", roomId);
-  
-    const unsubscribeChatRoom = onSnapshot(chatRoomRef, (snapshot) => {
-      const data = snapshot.data();
-      if (!data) return;
-  
-      // If document doesn't exist, create it
-      if (!snapshot.exists()) {
-        setDoc(chatRoomRef, {
+
+    const ref = doc(db, "chatRooms", roomId);
+
+    const unsub = onSnapshot(ref, (snap) => {
+      if (!snap.exists()) {
+        setDoc(ref, {
           userId,
           consultantId,
           createdAt: serverTimestamp(),
-          lastMessage: "",
-          lastMessageAt: serverTimestamp(),
           status: "active",
           ratingSubmitted: false,
-          appointmentDate: serverTimestamp(),
-        }).catch(console.log);
-        return;
-      }
-  
-      const now = new Date();
-      const appointmentDate = data.appointmentDate?.toDate ? data.appointmentDate.toDate() : new Date(data.appointmentDate);
-  
-      // Check if completed and rating not submitted
-      if (data.status === "completed" && !data.ratingSubmitted && appointmentDate <= now) {
-        console.log("🟢 Consultant marked chat as complete → showing rating modal");
-        setRatingModalVisible(true);
+        });
+      } else {
+        const data = snap.data();
+
+        const createdAt = data.createdAt?.toDate?.();
+        const twelveHoursPassed =
+          createdAt &&
+          Date.now() - createdAt.getTime() >= 12 * 60 * 60 * 1000;
+
+        // ✅ Ensures rating modal appears
+        if (
+          (data.status === "completed" || twelveHoursPassed) &&
+          !data.ratingSubmitted
+        ) {
+          setRatingModalVisible(true);
+        }
+
+        // ✅ CHAT LOCK LOGIC (ADDED ONLY)
+        if (
+          data.ratingSubmitted ||
+          data.status === "completed" ||
+          twelveHoursPassed
+        ) {
+          setIsChatLocked(true);
+        } else {
+          setIsChatLocked(false);
+        }
       }
     });
-  
-    return () => unsubscribeChatRoom();
+
+    return () => unsub();
   }, [roomId, userId, consultantId]);
 
-  // --- Send message hooks
+  /* ================= MESSAGES ================= */
+  useEffect(() => {
+    if (!roomId || !user) return;
+
+    const unsub = listenToMessages(roomId, (msgs) => {
+      setMessages(msgs);
+      setTimeout(() => flatListRef.current?.scrollToEnd(), 60);
+    });
+
+    markUserChatAsRead(roomId).catch(() => {});
+    return () => unsub();
+  }, [roomId, user]);
+
   const { sendTextMessage, sendFileMessage } = useSendMessage({
     roomId,
     senderId: user?.uid,
@@ -104,48 +156,27 @@ export default function ChatRoom() {
     setMessages,
   });
 
-  // --- Listen for messages + handle unsent
-  useEffect(() => {
-    if (!roomId || !user) return;
-
-    const unsubscribeMessages = listenToMessages(roomId, (msgs) => {
-      setMessages((prevMsgs) => {
-        return msgs.map((m) => {
-          const existing = prevMsgs.find((pm) => pm.id === m.id);
-          return existing && existing.unsent ? existing : m;
-        });
-      });
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 80);
-    });
-
-    markUserChatAsRead(roomId).catch(() => {});
-
-    return () => unsubscribeMessages();
-  }, [roomId, user]);
-
-  // --- Render single message
+  /* ================= RENDER MESSAGE ================= */
   const renderMessage = ({ item }) => {
     const mine = item.senderType === "user";
-    const textColor = mine ? "#fff" : "#000";
-
     const Wrapper = ({ children }) => (
       <TouchableOpacity
-        style={[styles.message, mine ? styles.myMessage : styles.theirMessage]}
-        onLongPress={() => {
-          if (!user?.uid) return;
-          const senderId = item.senderId || item.userId || item.senderUid;
-          handleUnsendMessage(item, roomId, senderId, setMessages);
-        }}
+        style={[
+          styles.message,
+          mine ? styles.myMessage : styles.theirMessage,
+        ]}
+        onLongPress={() =>
+          handleUnsendMessage(item, roomId, user?.uid, setMessages)
+        }
       >
         {children}
       </TouchableOpacity>
     );
 
     if (item.unsent) {
-      console.log(`🟠 Message unsent: ${item.id}`);
       return (
         <Wrapper>
-          <Text style={[styles.messageText, styles.unsentText, { color: textColor }]}>
+          <Text style={{ fontStyle: "italic", color: mine ? "#fff" : "#000" }}>
             🚫 Message unsent
           </Text>
         </Wrapper>
@@ -153,81 +184,112 @@ export default function ChatRoom() {
     }
 
     if (item.type === "image") {
-      const imageUri = item.fileUrl || item.localUri;
+      const uri = item.fileUrl || item.localUri;
       return (
         <Wrapper>
-          {imageUri ? (
-            <TouchableOpacity
-              onPress={() => {
-                setModalImageUri(imageUri);
-                setImageModalVisible(true);
-              }}
-            >
-              <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.imagePlaceholder}>
-              <ActivityIndicator />
-            </View>
-          )}
-          <Text style={{ marginTop: 5, color: textColor, fontSize: 12 }}>{item.fileName}</Text>
-          {mine && item.failed && <Text style={styles.failedText}>failed</Text>}
-        </Wrapper>
-      );
-    }
-
-    if (item.type === "file") {
-      return (
-        <Wrapper>
-          <Text style={[styles.messageText, { color: textColor }]}>📄 {item.fileName}</Text>
-          {mine && item.sending && <Text style={styles.statusText}>uploading...</Text>}
-          {mine && item.failed && <Text style={styles.failedText}>failed</Text>}
+          <TouchableOpacity
+            onPress={() => {
+              setModalImageUri(uri);
+              setImageModalVisible(true);
+            }}
+          >
+            <Image source={{ uri }} style={styles.image} />
+          </TouchableOpacity>
         </Wrapper>
       );
     }
 
     return (
       <Wrapper>
-        <Text style={[styles.messageText, { color: textColor }]}>{item.text}</Text>
-        {mine && item.sending && <Text style={styles.statusText}>sending...</Text>}
-        {mine && item.failed && <Text style={styles.failedText}>failed</Text>}
+        <Text style={{ color: mine ? "#fff" : "#000" }}>{item.text}</Text>
       </Wrapper>
     );
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: "#fff" }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
       <View style={styles.container}>
-        <Text style={styles.header}>Chat Room</Text>
+       {/* ================= HEADER ================= */}
+       <View style={styles.chatHeader}>
+          <View style={styles.avatar}>
+            <Image
+              source={
+                chatUser?.gender === "Female"
+                  ? require("../../assets/office-woman.png")
+                  : require("../../assets/office-man.png")
+              }
+              style={styles.avatarImage}
+            />
+          </View>
+
+          <View>
+            <Text style={styles.chatName}>
+              {chatUser?.name || "Client"}
+            </Text>
+            <Text
+              style={[
+                styles.chatStatus,
+                { color: chatUser?.isOnline ? "#4CAF50" : "#999" },
+              ]}
+            >
+              {chatUser?.isOnline
+                ? "Active now"
+                : formatLastSeen(chatUser?.lastSeen)}
+            </Text>
+          </View>
+        </View>
 
         <FlatList
           ref={flatListRef}
           data={messages}
-          keyExtractor={(item) => item.id}
           renderItem={renderMessage}
-          contentContainerStyle={{ paddingBottom: 120 }}
+          keyExtractor={(i) => i.id}
+          contentContainerStyle={{ paddingBottom: 140 }}
         />
 
-        {typing && <Text style={styles.typingText}>Consultant is typing...</Text>}
+        {/* 🔒 CHAT LOCK NOTICE (ADDED ONLY) */}
+        {isChatLocked && (
+          <Text style={styles.lockNotice}>
+            This consultation has ended. Messaging is disabled.
+          </Text>
+        )}
 
+        {/* ===== INPUT ===== */}
         <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.attachBtn} onPress={sendFileMessage}>
+          <TouchableOpacity
+            disabled={isChatLocked}
+            onPress={async () => {
+              const file = await pickFile();
+              if (file) await sendFileMessage(file);
+            }}
+          >
             <Text style={styles.attachText}>📎</Text>
           </TouchableOpacity>
 
           <TextInput
-            style={styles.input}
+            style={[
+              styles.input,
+              isChatLocked && { backgroundColor: "#eee" },
+            ]}
             value={text}
-            placeholder="Type a message..."
-            onChangeText={(v) => {
-              setText(v);
-              setTyping(true);
-              setTimeout(() => setTyping(false), 900);
-            }}
+            placeholder={
+              isChatLocked
+                ? "Consultation has ended"
+                : "Type a message..."
+            }
+            editable={!isChatLocked}
+            onChangeText={setText}
           />
 
           <TouchableOpacity
-            style={styles.sendBtn}
+            style={[
+              styles.sendBtn,
+              isChatLocked && { opacity: 0.5 },
+            ]}
+            disabled={isChatLocked}
             onPress={async () => {
               if (!text.trim()) return;
               await sendTextMessage(text);
@@ -239,61 +301,145 @@ export default function ChatRoom() {
         </View>
       </View>
 
-      {/* Image Modal */}
-      <Modal visible={imageModalVisible} transparent animationType="fade" onRequestClose={() => setImageModalVisible(false)}>
+      {/* ===== IMAGE MODAL ===== */}
+      <Modal visible={imageModalVisible} transparent animationType="fade">
         <View style={styles.modalBackground}>
-          {modalImageUri ? (
-            <Image source={{ uri: modalImageUri }} style={styles.modalImage} resizeMode="contain" />
-          ) : (
-            <ActivityIndicator size="large" color="#fff" />
-          )}
+          <Image source={{ uri: modalImageUri }} style={styles.modalImage} />
           <TouchableOpacity
-            style={{ position: "absolute", top: 40, right: 20, padding: 10, backgroundColor: "rgba(255,255,255,0.3)", borderRadius: 20 }}
+            style={styles.closeBtn}
             onPress={() => setImageModalVisible(false)}
           >
-            <Text style={{ color: "#fff", fontWeight: "bold" }}>Close</Text>
+            <Text style={{ color: "#fff", fontWeight: "700" }}>Close</Text>
           </TouchableOpacity>
         </View>
       </Modal>
 
-      {/* Rating Modal */}
+      {/* ===== RATING MODAL ===== */}
       <RatingModal
         visible={ratingModalVisible}
         onClose={() => setRatingModalVisible(false)}
-        onSubmit={async (rating, comment) => {
-          try {
-            const roomRef = doc(db, "chatRooms", roomId);
-            await updateDoc(roomRef, { ratingSubmitted: true });
-            console.log("🟢 Rating submitted successfully");
-            setRatingModalVisible(false);
-          } catch (err) {
-            console.log("❌ Failed to submit rating:", err);
-          }
+        onSubmit={({ rating, feedback }) => {
+          return new Promise((resolve) => {
+            Alert.alert(
+              "Rate Consultation",
+              "The consultant has marked this consultation as complete. Would you like to submit your rating now?",
+              [
+                { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+                {
+                  text: "Yes, Submit",
+                  onPress: async () => {
+                    try {
+                      await updateDoc(doc(db, "chatRooms", roomId), {
+                        ratingSubmitted: true,
+                        status: "completed",
+                      });
+
+                      await addDoc(collection(db, "ratings"), {
+                        roomId,
+                        consultantId,
+                        userId,
+                        rating,
+                        feedback: feedback || "",
+                        createdAt: serverTimestamp(),
+                      });
+
+                      setRatingModalVisible(false);
+                      resolve(true);
+                    } catch (e) {
+                      console.log("Rating submit error:", e);
+                      resolve(false);
+                    }
+                  },
+                },
+              ]
+            );
+          });
         }}
       />
     </KeyboardAvoidingView>
   );
 }
 
+/* ================= STYLES ================= */
+
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 15, paddingTop: 40 },
-  header: { fontSize: 22, fontWeight: "900", color: "#0F3E48", marginBottom: 15 },
-  message: { padding: 10, marginVertical: 6, maxWidth: "75%", borderRadius: 10 },
-  myMessage: { alignSelf: "flex-end", backgroundColor: "#0F3E48" },
-  theirMessage: { alignSelf: "flex-start", backgroundColor: "#E6E6E6" },
-  messageText: { color: "#fff" },
-  unsentText: { fontStyle: "italic", opacity: 0.8 },
-  statusText: { color: "#ccc", fontSize: 10, marginTop: 3 },
-  failedText: { color: "#c33", fontSize: 10, marginTop: 3 },
-  typingText: { marginLeft: 10, marginBottom: 4, color: "#4a4a4a" },
-  inputContainer: { position: "absolute", bottom: 0, left: 0, right: 0, flexDirection: "row", padding: 10, backgroundColor: "#fff", borderTopWidth: 1, borderColor: "#ccc" },
-  attachBtn: { justifyContent: "center", marginRight: 10 },
-  attachText: { fontSize: 22 },
-  input: { flex: 1, padding: 10, backgroundColor: "#F5F5F5", borderRadius: 10 },
-  sendBtn: { marginLeft: 10, backgroundColor: "#0F3E48", paddingVertical: 10, paddingHorizontal: 15, borderRadius: 10 },
+
+  chatHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderColor: "#E4E6EB",
+    paddingBottom: 10,
+    marginBottom: 10,
+  },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    overflow: "hidden",
+    marginRight: 10,
+  },
+  avatarImage: { width: "100%", height: "100%" },
+
+  chatName: { fontSize: 16, fontWeight: "700" },
+  chatStatus: { fontSize: 12, color: "#4CAF50" },
+
+  lockNotice: {
+    textAlign: "center",
+    color: "#888",
+    marginBottom: 6,
+    fontStyle: "italic",
+  },
+
+  message: {
+    padding: 10,
+    marginVertical: 6,
+    maxWidth: "75%",
+    borderRadius: 16,
+  },
+  myMessage: { alignSelf: "flex-end", backgroundColor: "#0084FF" },
+  theirMessage: { alignSelf: "flex-start", backgroundColor: "#E4E6EB" },
+
+  inputContainer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    padding: 10,
+    backgroundColor: "#F0F2F5",
+  },
+  attachText: { fontSize: 22, marginRight: 10 },
+  input: {
+    flex: 1,
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    paddingHorizontal: 15,
+  },
+  sendBtn: {
+    backgroundColor: "#0084FF",
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    marginLeft: 10,
+  },
   sendBtnText: { color: "#fff", fontWeight: "700" },
+
   image: { width: 150, height: 150, borderRadius: 10 },
-  imagePlaceholder: { width: 150, height: 150, justifyContent: "center", alignItems: "center", backgroundColor: "#ccc", borderRadius: 10 },
-  modalBackground: { flex: 1, backgroundColor: "rgba(0,0,0,0.9)", justifyContent: "center", alignItems: "center" },
+
+  modalBackground: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   modalImage: { width: "90%", height: "80%" },
+  closeBtn: {
+    position: "absolute",
+    top: 40,
+    right: 20,
+    padding: 10,
+    backgroundColor: "rgba(255,255,255,0.3)",
+    borderRadius: 20,
+  },
 });

@@ -78,7 +78,7 @@ export default function Home() {
 
   const isPremium = subType === "Premium";
 
-  const goToConsultation = () => {
+  const goToConsultations = () => {
     if (!isPremium) {
       Alert.alert(
         "Premium Feature",
@@ -90,22 +90,12 @@ export default function Home() {
       );
       return;
     }
-    router.push("/User/Consultation");
+    router.push("/User/Consultations");
   };
 
-  const goToDesignAI = () => router.push("/user/AIDesigner");
-  const goToCustomizeAI = () => router.push("/user/AIDesigner");
-  const goToProjects = () => router.push("/user/Projects");
-
-  const logout = async () => {
-    try {
-      await AsyncStorage.clear();
-      await auth.signOut();
-      router.replace("/User/Login");
-    } catch (e) {
-      Alert.alert("Error", "Logout failed.");
-    }
-  };
+  const goToDesignAI = () => router.push("/User/Design");
+  const goToCustomize = () => router.push("/User/Customize");
+  const goToProjects = () => router.push("/User/Projects");
 
   useEffect(() => {
     loadProfile();
@@ -179,14 +169,14 @@ export default function Home() {
             <Text style={styles.actionText}>Design with AI</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.actionCard, styles.actionCardPink]} onPress={goToCustomizeAI} activeOpacity={0.8}>
+          <TouchableOpacity style={[styles.actionCard, styles.actionCardPink]} onPress={goToCustomize} activeOpacity={0.8}>
             <Image source={require("../../assets/customize.png")} style={styles.actionIcon} />
             <Text style={styles.actionText}>Customize with AI</Text>
           </TouchableOpacity>
         </View>
       {/* ✅ Consultation moved below Projects */}
       <View style={styles.consultationWrap}>
-          <TouchableOpacity style={[styles.actionCard, styles.actionCardPurple]} onPress={goToConsultation} activeOpacity={0.8}>
+          <TouchableOpacity style={[styles.actionCard, styles.actionCardPurple]} onPress={goToConsultations} activeOpacity={0.8}>
             <Image source={require("../../assets/consultation.png")} style={styles.actionIcon} />
             <Text style={styles.actionText}>Consultation</Text>
           </TouchableOpacity>

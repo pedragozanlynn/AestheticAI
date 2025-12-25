@@ -1,17 +1,35 @@
 // hooks/useSendMessage.js
-import { addDoc, collection, doc, serverTimestamp, updateDoc } from "firebase/firestore";
-import { useState } from "react";
+import {
+  addDoc,
+  collection,
+  doc,
+  serverTimestamp,
+  setDoc,
+} from "firebase/firestore";
 import { db } from "../config/firebase";
 import { uploadToSupabase } from "./fileUploadService";
 
-export function useSendMessage({ roomId, senderId, senderType }) {
-  const [messages, setMessages] = useState([]);
-
-  // --- Send text message ---
+/**
+ * useSendMessage
+ * - Sends text / file messages
+ * - Updates chatRooms metadata (lastMessage, unread flags)
+ * - Safe even if chatRoom does not exist yet
+ */
+export function useSendMessage({
+  roomId,
+  senderId,
+  senderType, // "user" | "consultant"
+  setMessages, // from ChatRoom screen (for optimistic UI)
+}) {
+  // ----------------------------
+  // SEND TEXT MESSAGE
+  // ----------------------------
   const sendTextMessage = async (text) => {
-    if (!text?.trim() || !senderId || !roomId) return;
+    if (!text?.trim() || !roomId || !senderId) return;
 
-    const tempId = "temp-" + Date.now();
+    const tempId = `temp-${Date.now()}`;
+
+    // 🔹 Optimistic UI
     setMessages((prev) => [
       ...prev,
       {
@@ -27,6 +45,7 @@ export function useSendMessage({ roomId, senderId, senderType }) {
 
     try {
       const messagesRef = collection(db, "chatRooms", roomId, "messages");
+
       const docRef = await addDoc(messagesRef, {
         text,
         senderId,
@@ -34,57 +53,65 @@ export function useSendMessage({ roomId, senderId, senderType }) {
         type: "text",
         createdAt: serverTimestamp(),
         unsent: false,
-        unsentAt: null,
-        fileUrl: null,
-        fileName: null,
-        fileType: null,
       });
 
-      // Update temporary message with real ID
+      // 🔹 Replace temp message
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === tempId ? { ...m, id: docRef.id, sending: false } : m
+          m.id === tempId
+            ? { ...m, id: docRef.id, sending: false }
+            : m
         )
       );
 
-      // Update last message in chat room
-      const chatRoomRef = doc(db, "chatRooms", roomId);
-      await updateDoc(chatRoomRef, {
-        lastMessage: text,
-        lastMessageAt: serverTimestamp(),
-      });
+      // 🔥 UPDATE / CREATE CHATROOM METADATA (SAFE)
+      await setDoc(
+        doc(db, "chatRooms", roomId),
+        {
+          lastMessage: text,
+          lastMessageAt: serverTimestamp(),
+          unreadForUser: senderType === "consultant",
+          unreadForConsultant: senderType === "user",
+        },
+        { merge: true }
+      );
 
-      return docRef.id; // real message ID
+      return docRef.id;
     } catch (err) {
-      console.log("❌ sendTextMessage failed", err);
+      console.log("❌ sendTextMessage failed:", err);
+
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === tempId ? { ...m, sending: false, failed: true } : m
+          m.id === tempId
+            ? { ...m, sending: false, failed: true }
+            : m
         )
       );
     }
   };
 
-  // --- Send file or image message ---
+  // ----------------------------
+  // SEND FILE / IMAGE MESSAGE
+  // ----------------------------
   const sendFileMessage = async (file) => {
-    if (!file || !senderId || !roomId) return;
+    if (!file || !roomId || !senderId) return;
 
-    const isImage = file.mimeType.startsWith("image/");
-    const tempId = "temp-file-" + Date.now();
+    const isImage = file.mimeType?.startsWith("image/");
+    const tempId = `temp-file-${Date.now()}`;
 
+    // 🔹 Optimistic UI
     setMessages((prev) => [
       ...prev,
       {
         id: tempId,
-        fileName: file.name,
-        fileType: file.mimeType,
         senderId,
         senderType,
         type: isImage ? "image" : "file",
+        fileName: file.name,
+        fileType: file.mimeType,
+        localUri: file.uri,
         sending: true,
         failed: false,
-        fileUrl: null,
-        localUri: file.uri,
       },
     ]);
 
@@ -93,6 +120,7 @@ export function useSendMessage({ roomId, senderId, senderType }) {
       if (!uploaded?.fileUrl) throw new Error("Upload failed");
 
       const messagesRef = collection(db, "chatRooms", roomId, "messages");
+
       const docRef = await addDoc(messagesRef, {
         text: uploaded.fileName,
         senderId,
@@ -103,9 +131,9 @@ export function useSendMessage({ roomId, senderId, senderType }) {
         fileType: uploaded.fileType,
         createdAt: serverTimestamp(),
         unsent: false,
-        unsentAt: null,
       });
 
+      // 🔹 Replace temp message
       setMessages((prev) =>
         prev.map((m) =>
           m.id === tempId
@@ -116,28 +144,39 @@ export function useSendMessage({ roomId, senderId, senderType }) {
                 failed: false,
                 fileUrl: uploaded.fileUrl,
                 localUri: null,
-                type: isImage ? "image" : "file",
               }
             : m
         )
       );
 
-      const chatRoomRef = doc(db, "chatRooms", roomId);
-      await updateDoc(chatRoomRef, {
-        lastMessage: uploaded.fileName,
-        lastMessageAt: serverTimestamp(),
-      });
+      // 🔥 UPDATE / CREATE CHATROOM METADATA
+      await setDoc(
+        doc(db, "chatRooms", roomId),
+        {
+          lastMessage: isImage ? "📷 Image" : uploaded.fileName,
+          lastMessageAt: serverTimestamp(),
+          unreadForUser: senderType === "consultant",
+          unreadForConsultant: senderType === "user",
+        },
+        { merge: true }
+      );
 
       return docRef.id;
     } catch (err) {
-      console.log("❌ sendFileMessage failed", err);
+      console.log("❌ sendFileMessage failed:", err);
+
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === tempId ? { ...m, sending: false, failed: true } : m
+          m.id === tempId
+            ? { ...m, sending: false, failed: true }
+            : m
         )
       );
     }
   };
 
-  return { messages, setMessages, sendTextMessage, sendFileMessage };
+  return {
+    sendTextMessage,
+    sendFileMessage,
+  };
 }

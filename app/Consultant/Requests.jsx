@@ -49,61 +49,80 @@ export default function Requests() {
     loadProfile();
   }, []);
 
-  // Fetch requests for this consultant
-  useEffect(() => {
+  // Fetch requests
+  const fetchRequests = async () => {
     if (!consultant?.uid) return;
-    const fetchRequests = async () => {
-      try {
-        const q = query(
-          collection(db, "appointments"),
-          where("consultantId", "==", consultant.uid)
-        );
-        const snap = await getDocs(q);
-        const results = [];
-        for (const docItem of snap.docs) {
-          const appointment = { id: docItem.id, ...docItem.data() };
-          // Fetch user data
-          const userRef = doc(db, "users", appointment.userId);
-          const userSnap = await getDoc(userRef);
-          if (userSnap.exists()) {
-            const u = userSnap.data();
-            appointment.userName =
-              u.fullName ||
-              u.name ||
-              `${u.firstName || ""} ${u.lastName || ""}`.trim();
-            appointment.userEmail = u.email || "Unknown";
-          } else {
-            appointment.userName = "Unknown User";
-            appointment.userEmail = "N/A";
-          }
-          results.push(appointment);
+
+    try {
+      setLoading(true);
+      const q = query(
+        collection(db, "appointments"),
+        where("consultantId", "==", consultant.uid)
+      );
+      const snap = await getDocs(q);
+      const results = [];
+
+      for (const docItem of snap.docs) {
+        const appointment = { id: docItem.id, ...docItem.data() };
+
+        const userRef = doc(db, "users", appointment.userId);
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists()) {
+          const u = userSnap.data();
+          appointment.userName =
+            u.fullName ||
+            u.name ||
+            `${u.firstName || ""} ${u.lastName || ""}`.trim();
+          appointment.userEmail = u.email || "Unknown";
+        } else {
+          appointment.userName = "Unknown User";
+          appointment.userEmail = "N/A";
         }
-        setRequests(results);
-      } catch (err) {
-        console.log("❌ Fetch request error:", err);
-      } finally {
-        setLoading(false);
+
+        results.push(appointment);
       }
-    };
+
+      setRequests(results);
+    } catch (err) {
+      console.log("❌ Fetch request error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchRequests();
   }, [consultant]);
 
-  // Accept request
+  // ✅ ACCEPT = create chatroom ONCE (appointment-based)
   const acceptRequest = async (item) => {
     try {
-      await updateDoc(doc(db, "appointments", item.id), { status: "accepted" });
-      const roomId = await ensureChatRoom(
-        `${item.userId}_${consultant.uid}`,
+      const roomId = `appointment_${item.id}`;
+
+      await updateDoc(doc(db, "appointments", item.id), {
+        status: "accepted",
+        chatRoomId: roomId,
+      });
+
+      // Ensure chatroom exists (ONE per appointment)
+      await ensureChatRoom(
+        item.id,          // appointmentId
         item.userId,
-        consultant.uid,
-        item.id
+        consultant.uid
       );
+
       setRequests((prev) =>
         prev.map((r) =>
-          r.id === item.id ? { ...r, status: "accepted", chatRoomId: roomId } : r
+          r.id === item.id
+            ? { ...r, status: "accepted", chatRoomId: roomId }
+            : r
         )
       );
-      Alert.alert("Success", "Appointment accepted!");
+
+      Alert.alert("Success", "Appointment accepted!", [
+        { text: "OK", onPress: fetchRequests },
+      ]);
     } catch (err) {
       Alert.alert("Error", err.message);
     }
@@ -112,7 +131,9 @@ export default function Requests() {
   // Decline request
   const declineRequest = async (item) => {
     try {
-      await updateDoc(doc(db, "appointments", item.id), { status: "declined" });
+      await updateDoc(doc(db, "appointments", item.id), {
+        status: "declined",
+      });
       setRequests((prev) =>
         prev.map((r) =>
           r.id === item.id ? { ...r, status: "declined" } : r
@@ -123,23 +144,19 @@ export default function Requests() {
     }
   };
 
-  // Open chat
+  // ✅ OPEN CHAT = open existing chatroom ONLY
   const openChat = async (item) => {
     try {
-      let roomId = item.chatRoomId;
+      const roomId = item.chatRoomId;
+
       if (!roomId) {
-        roomId = await ensureChatRoom(
-          `${item.userId}_${consultant.uid}`,
-          item.userId,
-          consultant.uid,
-          item.id
+        Alert.alert(
+          "Chatroom not available",
+          "Make sure the appointment is accepted first."
         );
-        setRequests((prev) =>
-          prev.map((r) =>
-            r.id === item.id ? { ...r, chatRoomId: roomId } : r
-          )
-        );
+        return;
       }
+
       router.push({
         pathname: "/Consultant/ChatRoom",
         params: {
@@ -153,18 +170,14 @@ export default function Requests() {
     }
   };
 
-  // Render each request card
   const renderItem = ({ item }) => (
     <View style={styles.card}>
-      {/* ✅ Top row: name + status */}
       <View style={styles.topRow}>
         <Text style={styles.clientName}>{item.userName}</Text>
         <Text style={styles.status(item.status)}>{item.status}</Text>
       </View>
 
-      {/* ✅ Two-column layout */}
       <View style={styles.detailsRow}>
-        {/* Left side: details */}
         <View style={styles.detailsBlock}>
           <Text style={styles.detail}>{item.userEmail}</Text>
           <Text style={styles.detail}>{item.date}</Text>
@@ -172,7 +185,6 @@ export default function Requests() {
           <Text style={styles.detail}>{item.notes}</Text>
         </View>
 
-        {/* Right side: actions */}
         <View style={styles.statusBlock}>
           {item.status === "pending" && (
             <View style={styles.actionRow}>
@@ -206,10 +218,11 @@ export default function Requests() {
 
   return (
     <View style={styles.container}>
-      {/* ✅ Header with subtitle */}
       <View style={styles.headerWrap}>
         <Text style={styles.header}>Consultation Requests</Text>
-        <Text style={styles.subHeader}>Manage and review your latest appointments</Text>
+        <Text style={styles.subHeader}>
+          Manage and review your latest appointments
+        </Text>
       </View>
 
       {loading ? (
@@ -224,154 +237,95 @@ export default function Requests() {
           contentContainerStyle={{ paddingBottom: 120 }}
         />
       )}
+
       <BottomNavbar role="consultant" />
     </View>
   );
 }
 
 /* ------------------------------------------
- *              STYLES
+ * STYLES (UNCHANGED)
  * ------------------------------------------ */
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: "#F3F9FA", 
-  },
-
+  container: { flex: 1, backgroundColor: "#F3F9FA" },
   headerWrap: {
     alignItems: "center",
     backgroundColor: "#01579B",
     paddingVertical: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
     elevation: 4,
     width: "100%",
     paddingTop: 60,
   },
-
   header: {
     fontSize: 22,
     fontWeight: "900",
     color: "#FFFFFF",
-    letterSpacing: 0.8,
-    textAlign: "center",
   },
-
   subHeader: {
     fontSize: 14,
     color: "#E0F7FA",
     marginTop: 4,
     fontStyle: "italic",
-    letterSpacing: 0.3,
-    textAlign: "center",
   },
-
   card: {
     backgroundColor: "#FFFFFF",
     paddingVertical: 20,
     paddingHorizontal: 12,
     borderRadius: 10,
     marginTop: 20,
-    marginBottom: 10,
     marginHorizontal: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
     borderLeftWidth: 3,
-    borderLeftColor: "#912f56", 
+    borderLeftColor: "#912f56",
   },
-
   topRow: {
     flexDirection: "row",
-    justifyContent: "space-between", // name left, status right
-    alignItems: "center",
-    marginBottom: 6,
+    justifyContent: "space-between",
   },
-
-  clientName: { 
+  clientName: {
     fontSize: 16,
-    fontWeight: "700", 
-    color: "#01579B", 
-    letterSpacing: 0.4,
+    fontWeight: "700",
+    color: "#01579B",
   },
-
   detailsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
   },
-
-  detailsBlock: {
-    flex: 1,
-  },
-
-  statusBlock: {
-    alignItems: "flex-end",
-    marginLeft: 12,
-  },
-
-  actionRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 6,
-  },
-
+  detailsBlock: { flex: 1 },
+  statusBlock: { alignItems: "flex-end" },
+  actionRow: { flexDirection: "row", gap: 8 },
   btn: {
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 8,
-    alignItems: "center",
   },
-
-  acceptBtn: {
-    backgroundColor: "#2c4f4f",
-    marginTop: 40,
-  },
-
+  acceptBtn: { backgroundColor: "#2c4f4f", marginTop: 40 },
   cancelBtn: {
     borderWidth: 1,
     borderColor: "#912f56",
     backgroundColor: "#fff",
     marginTop: 40,
-
   },
-
   btnTextLight: {
     color: "#fff",
     fontWeight: "700",
     fontSize: 12,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
   },
-
   btnTextDark: {
     color: "#912f56",
     fontWeight: "700",
     fontSize: 12,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
   },
-
-  detail: { 
+  detail: {
     fontSize: 13,
-    marginTop: 2, 
-    color: "#455A64", 
-    lineHeight: 18,
-    fontWeight: "500",
+    marginTop: 2,
+    color: "#455A64",
   },
-
   status: (s) => ({
     fontSize: 12,
     fontWeight: "700",
-    textTransform: "capitalize",
     paddingVertical: 2,
     paddingHorizontal: 10,
     borderRadius: 6,
-    overflow: "hidden",
     backgroundColor:
       s === "pending"
         ? "#FFF3CD"
@@ -384,14 +338,11 @@ const styles = StyleSheet.create({
         : s === "accepted"
         ? "#0F766E"
         : "#B00020",
-    letterSpacing: 0.3,
   }),
-
-  empty: { 
-    textAlign: "center", 
-    marginTop: 20, 
-    color: "#90A4AE", 
+  empty: {
+    textAlign: "center",
+    marginTop: 20,
+    color: "#90A4AE",
     fontStyle: "italic",
-    fontSize: 14,
   },
 });

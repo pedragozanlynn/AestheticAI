@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Modal,
   StyleSheet,
@@ -6,32 +6,51 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from "react-native";
 
-export default function RatingModal({ visible, onSubmit, onClose, reviewerName }) {
+export default function RatingModal({
+  visible,
+  onSubmit,
+  onClose,
+  reviewerName = "Anonymous",
+}) {
   const [rating, setRating] = useState(0);
   const [feedback, setFeedback] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async () => {
-    if (rating === 0) {
-      alert("Please select a rating.");
-      return;
+  // 🔥 Reset state every time modal opens
+  useEffect(() => {
+    if (visible) {
+      setRating(0);
+      setFeedback("");
+      setLoading(false);
     }
+  }, [visible]);
+
+  const handleSubmit = async () => {
+    if (rating === 0 || loading) return;
 
     setLoading(true);
 
-    // Pass reviewerName safely
-    const success = await onSubmit(rating, feedback || "", reviewerName || "Anonymous");
+    try {
+      // ✅ MUST RETURN TRUE ON SUCCESS
+      const result = await onSubmit({
+        rating,
+        feedback: feedback || "",
+        reviewerName,
+      });
 
-    setLoading(false);
-
-    if (success) {
-      setRating(0);
-      setFeedback("");
-      onClose && onClose();
-    } else {
-      alert("Failed to submit rating. Please try again.");
+      if (result !== false) {
+        onClose?.(); // close modal permanently
+      } else {
+        alert("Failed to submit rating. Please try again.");
+      }
+    } catch (err) {
+      console.log("Rating submit error:", err);
+      alert("Something went wrong while submitting your rating.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -41,7 +60,7 @@ export default function RatingModal({ visible, onSubmit, onClose, reviewerName }
         <View style={styles.box}>
           <Text style={styles.title}>Rate your consultation</Text>
 
-          {/* ⭐ STARS */}
+          {/* ⭐ STAR RATING */}
           <View style={styles.stars}>
             {[1, 2, 3, 4, 5].map((num) => (
               <TouchableOpacity
@@ -53,7 +72,7 @@ export default function RatingModal({ visible, onSubmit, onClose, reviewerName }
                   style={[
                     styles.star,
                     rating >= num && styles.activeStar,
-                    loading && { opacity: 0.5 },
+                    loading && { opacity: 0.4 },
                   ]}
                 >
                   ★
@@ -62,7 +81,7 @@ export default function RatingModal({ visible, onSubmit, onClose, reviewerName }
             ))}
           </View>
 
-          {/* ⭐ FEEDBACK TEXT FIELD */}
+          {/* 📝 FEEDBACK */}
           <TextInput
             style={styles.input}
             placeholder="Write feedback (optional)"
@@ -70,41 +89,41 @@ export default function RatingModal({ visible, onSubmit, onClose, reviewerName }
             value={feedback}
             onChangeText={setFeedback}
             multiline
+            maxLength={300}
             editable={!loading}
           />
 
-          {/* Character Counter */}
           <Text style={styles.counter}>{feedback.length}/300</Text>
 
-          {/* ⭐ SUBMIT BUTTON */}
+          {/* ✅ SUBMIT */}
           <TouchableOpacity
             style={[
               styles.submitBtn,
-              loading && { opacity: 0.6 },
-              rating === 0 && { opacity: 0.4 },
+              (loading || rating === 0) && { opacity: 0.6 },
             ]}
             onPress={handleSubmit}
             disabled={loading || rating === 0}
           >
-            <Text style={styles.submitText}>
-              {loading ? "Submitting..." : "Submit Rating"}
-            </Text>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.submitText}>Submit Rating</Text>
+            )}
           </TouchableOpacity>
 
-          {/* ⭐ CANCEL BUTTON */}
-          <TouchableOpacity
-            style={styles.cancelBtn}
-            onPress={onClose}
-            disabled={loading}
-          >
-            <Text style={styles.cancelText}>Cancel</Text>
-          </TouchableOpacity>
-
+          {/* ❌ CANCEL */}
+          {!loading && (
+            <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </Modal>
   );
 }
+
+/* ================= STYLES ================= */
 
 const styles = StyleSheet.create({
   overlay: {
@@ -117,60 +136,61 @@ const styles = StyleSheet.create({
     width: "85%",
     backgroundColor: "#fff",
     padding: 20,
-    borderRadius: 15,
+    borderRadius: 16,
   },
   title: {
     fontSize: 18,
     fontWeight: "700",
-    marginBottom: 15,
     textAlign: "center",
+    marginBottom: 15,
   },
   stars: {
     flexDirection: "row",
     justifyContent: "center",
-    marginVertical: 10,
+    marginVertical: 12,
   },
   star: {
-    fontSize: 35,
-    color: "#aaa",
-    marginHorizontal: 5,
+    fontSize: 36,
+    color: "#bbb",
+    marginHorizontal: 6,
   },
   activeStar: {
     color: "#FFD700",
   },
   input: {
     borderWidth: 1,
-    borderRadius: 8,
     borderColor: "#ddd",
+    borderRadius: 10,
     padding: 10,
-    minHeight: 60,
-    maxHeight: 120,
+    minHeight: 70,
     textAlignVertical: "top",
     marginTop: 10,
   },
   counter: {
-    marginTop: 5,
     fontSize: 12,
     color: "#777",
     textAlign: "right",
+    marginTop: 4,
   },
   submitBtn: {
-    marginTop: 15,
+    marginTop: 16,
     backgroundColor: "#0F3E48",
-    padding: 12,
+    paddingVertical: 12,
     borderRadius: 10,
+    alignItems: "center",
   },
   submitText: {
     color: "#fff",
-    textAlign: "center",
     fontWeight: "700",
+    fontSize: 15,
   },
   cancelBtn: {
     marginTop: 10,
-    padding: 10,
+    paddingVertical: 10,
   },
   cancelText: {
-    color: "#333",
     textAlign: "center",
+    color: "#555",
+    fontWeight: "600",
   },
 });

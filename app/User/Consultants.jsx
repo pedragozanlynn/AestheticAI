@@ -46,17 +46,18 @@ export default function Consultation() {
     loadUser();
   }, []);
 
+  // ✅ Updated categories with only specializations + All
   const categories = [
     "All",
-    "Architecture",
-    "Interior Design",
-    "Civil Engineering",
+    "Architectural Design",
+    "Residential Planning",
+    "Sustainable Architecture",
     "Structural Engineering",
-    "Electrical Engineering",
-    "Mechanical Engineering",
-    "Sanitary / Plumbing Engineering",
-    "Landscape Architecture",
-    "Construction Management",
+    "Construction Engineering",
+    "Geotechnical Engineering",
+    "Residential Interior Design",
+    "Lighting Design",
+    "Furniture Design",
   ];
 
   useEffect(() => {
@@ -143,8 +144,28 @@ export default function Consultation() {
     <View style={styles.page}>
       {/* ✅ HEADER */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Browse consultants</Text>
-        <Text style={styles.headerSubtitle}>Connect with trusted experts in every field </Text>
+
+  {/* 🔝 HEADER ICONS */}
+  <View style={styles.headerIcons}>
+    <TouchableOpacity
+      onPress={() => router.push("/User/ChatList")}
+      style={styles.iconBtn}
+    >
+      <Ionicons name="chatbubble-ellipses" size={24} color="#FFF" />
+    </TouchableOpacity>
+
+    <TouchableOpacity
+      onPress={() => router.push("/User/Consultations")}
+      style={styles.iconBtn}
+    >
+<Ionicons name="time" size={24} color="#FFF" />
+</TouchableOpacity>
+  </View>
+
+  <Text style={styles.headerTitle}>Browse consultants</Text>
+  <Text style={styles.headerSubtitle}>
+    Connect with trusted experts in every field
+  </Text>
 
         {/* 🔍 Search Bar */}
         <View style={styles.searchContainer}>
@@ -158,7 +179,6 @@ export default function Consultation() {
         </View>
       </View>
 
-      {/* 🧠 Category Chips outside header */}
       <View style={styles.categoryBar}>
         <ScrollView
           horizontal
@@ -206,9 +226,11 @@ export default function Consultation() {
                 source={
                   c.avatar
                     ? { uri: c.avatar }
-                    : c.gender === "female"
+                    : c.gender === "Female"
                     ? require("../../assets/office-woman.png")
-                    : require("../../assets/office-man.png")
+                    : c.gender === "male"
+                    ? require("../../assets/office-man.png")
+                    : require("../../assets/office-woman.png") // ✅ fallback kapag walang gender
                 }
                 style={styles.avatar}
               />
@@ -272,10 +294,25 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
   },
+  headerIcons: {
+    position: "absolute",
+    top: 20,
+    right: 10,
+    flexDirection: "row",
+    gap: 5,
+  },
+  
+  iconBtn: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.15)",
+  },
+  
   headerTitle: {
     fontSize: 22,
     fontWeight: "700",
     color: "#FFF",
+    marginTop: 10,
     marginBottom: 6,
     textAlign: "left",
     letterSpacing: 0.5,
@@ -291,6 +328,7 @@ const styles = StyleSheet.create({
 
   // Search bar
   searchContainer: {
+    marginTop: 5,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFF",
@@ -336,10 +374,12 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
   },
   categoryChipActive: {
-    backgroundColor: "#912f56",  },
+    backgroundColor: "#912f56",
+  },
   categoryText: {
     fontSize: 14,
-    color: "#912f56",    fontWeight: "500",
+    color: "#912f56",
+    fontWeight: "500",
   },
   categoryTextActive: {
     fontWeight: "700",
@@ -372,12 +412,28 @@ const styles = StyleSheet.create({
     height: 72,
     borderRadius: 36,
     borderWidth: 2,
-    borderColor: "#81D4FA", 
+    borderColor: "#81D4FA",
     backgroundColor: "#912f56",
     shadowColor: "#0288D1",
     shadowOpacity: 0.3,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 },
+  },
+  consultantName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F3E48",
+  },
+  consultantTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0288D1",
+    marginTop: 2,
+  },
+  consultantBio: {
+    fontSize: 13,
+    color: "#555",
+    marginTop: 2,
   },
   ratingContainer: {
     flexDirection: "row",
@@ -398,8 +454,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
   },
-  
-
   noResults: {
     color: "#AAA",
     marginTop: 20,
@@ -407,3 +461,4 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
 });
+

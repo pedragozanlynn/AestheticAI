@@ -1,11 +1,26 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  Alert,
+} from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+
+import { db } from "../../config/firebase";
 import BottomNavbar from "../components/BottomNav";
-import Button from "../components/Button"; // custom Button
+import Button from "../components/Button";
 
 export default function ConsultantProfile() {
-  // ✅ Fixed consultant name + female avatar
+  const router = useRouter();
+
+  // TEMP (replace later with real data if needed)
   const userName = "Noelyn Pedragoza";
   const avatarSource = require("../../assets/office-woman.png");
 
@@ -13,9 +28,46 @@ export default function ConsultantProfile() {
     console.log(`Pressed: ${section}`);
   };
 
+  /* ================= LOGOUT (FINAL FIX) ================= */
   const handleLogout = async () => {
-    console.log("Logging out...");
-    // clear storage or navigate to login screen here
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to logout?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Logout",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const uid = await AsyncStorage.getItem(
+                "aestheticai:current-user-id"
+              );
+
+              // ✅ mark consultant offline
+              if (uid) {
+                await updateDoc(doc(db, "consultants", uid), {
+                  isOnline: false,
+                  lastSeen: serverTimestamp(),
+                });
+              }
+
+              // ✅ clear ALL local storage
+              await AsyncStorage.multiRemove([
+                "aestheticai:current-user-id",
+                "aestheticai:current-user-role",
+              ]);
+
+              // ✅ reset navigation
+              router.replace("/Login");
+            } catch (err) {
+              console.log("❌ Logout error:", err);
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   return (
@@ -25,7 +77,6 @@ export default function ConsultantProfile() {
         <View style={styles.profileRow}>
           <Image source={avatarSource} style={styles.avatarImage} />
           <View style={styles.profileInfo}>
-            {/* ✅ Consultant’s name displayed */}
             <Text style={styles.header}>{userName}</Text>
             <Text style={styles.subHeader}>Consultant Account</Text>
           </View>
@@ -34,47 +85,67 @@ export default function ConsultantProfile() {
       </View>
 
       <ScrollView contentContainerStyle={styles.container}>
-        {/* Edit Consultant Profile */}
-        <TouchableOpacity style={styles.card} onPress={() => handlePress("Edit Consultant Profile")}>
-          <Ionicons name="person-circle-outline" size={30} color="#1E90FF" />
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => handlePress("Edit Consultant Profile")}
+        >
+          <Ionicons
+            name="person-circle-outline"
+            size={30}
+            color="#1E90FF"
+          />
           <View style={styles.cardContent}>
             <Text style={styles.cardTitle}>Edit Consultant Profile</Text>
-            <Text style={styles.cardSubtitle}>Update your professional details</Text>
+            <Text style={styles.cardSubtitle}>
+              Update your professional details
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color="#999" />
         </TouchableOpacity>
 
-        {/* Manage Appointments */}
-        <TouchableOpacity style={styles.card} onPress={() => handlePress("Manage Appointments")}>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => handlePress("Manage Appointments")}
+        >
           <Ionicons name="calendar-outline" size={30} color="#0277BD" />
           <View style={styles.cardContent}>
             <Text style={styles.cardTitle}>Manage Appointments</Text>
-            <Text style={styles.cardSubtitle}>View and update your schedule</Text>
+            <Text style={styles.cardSubtitle}>
+              View and update your schedule
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color="#999" />
         </TouchableOpacity>
 
-        {/* View Earnings */}
-        <TouchableOpacity style={styles.card} onPress={() => handlePress("View Earnings")}>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => handlePress("View Earnings")}
+        >
           <Ionicons name="cash-outline" size={30} color="#2ECC71" />
           <View style={styles.cardContent}>
             <Text style={styles.cardTitle}>View Earnings</Text>
-            <Text style={styles.cardSubtitle}>Check your balance and withdrawals</Text>
+            <Text style={styles.cardSubtitle}>
+              Check your balance and withdrawals
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color="#999" />
         </TouchableOpacity>
 
-        {/* ✅ Change Password */}
-        <TouchableOpacity style={styles.card} onPress={() => handlePress("Change Password")}>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => handlePress("Change Password")}
+        >
           <Ionicons name="lock-closed-outline" size={30} color="#C44569" />
           <View style={styles.cardContent}>
             <Text style={styles.cardTitle}>Change Password</Text>
-            <Text style={styles.cardSubtitle}>Secure your consultant account</Text>
+            <Text style={styles.cardSubtitle}>
+              Secure your consultant account
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color="#999" />
         </TouchableOpacity>
 
-        {/* ✅ Logout using custom Button */}
+        {/* LOGOUT */}
         <Button
           icon={<Ionicons name="log-out-outline" size={28} color="#fff" />}
           title="Logout"
@@ -99,12 +170,6 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     paddingHorizontal: 24,
     backgroundColor: "#01579B",
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
@@ -122,7 +187,6 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "800",
     color: "#faf9f6",
-    letterSpacing: 1.2,
   },
   subHeader: {
     fontSize: 14,
@@ -136,10 +200,6 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     marginTop: 18,
     backgroundColor: "#faf9f6",
-    shadowColor: "#1E90FF",
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
   },
 
   container: { padding: 20 },
@@ -151,10 +211,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 18,
     marginBottom: 18,
-    shadowColor: "#912f56",
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
     borderWidth: 1,
     borderColor: "#f1f1f1",
   },

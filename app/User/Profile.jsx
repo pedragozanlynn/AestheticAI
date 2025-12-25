@@ -1,28 +1,54 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  Modal,
+} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../../config/firebase";
+import { useRouter } from "expo-router";
+
 import useSubscriptionType from "../../services/useSubscriptionType";
 import BottomNavbar from "../components/BottomNav";
-import Button from "../components/Button"; // custom Button
+import Button from "../components/Button";
 
 export default function Profile() {
+  const router = useRouter();
   const subType = useSubscriptionType();
+
   const [userName, setUserName] = useState("Guest");
   const [gender, setGender] = useState("male");
+  const [logoutVisible, setLogoutVisible] = useState(false);
 
+  /* ================= LOAD USER FROM USERS COLLECTION ================= */
   useEffect(() => {
-    const loadUser = async () => {
+    const loadUserFromDB = async () => {
       try {
-        const storedName = await AsyncStorage.getItem("user:name");
-        const storedGender = await AsyncStorage.getItem("user:gender");
-        if (storedName) setUserName(storedName);
-        if (storedGender) setGender(storedGender);
+        const uid = await AsyncStorage.getItem(
+          "aestheticai:current-user-id"
+        );
+        if (!uid) return;
+
+        const snap = await getDoc(doc(db, "users", uid));
+        if (!snap.exists()) return;
+
+        const data = snap.data();
+
+        // ✅ FIX HERE (name field)
+        setUserName(data?.name || "Guest");
+        setGender(data?.gender?.toLowerCase() || "male");
       } catch (err) {
-        console.log("Error loading user info:", err);
+        console.log("Error loading user from DB:", err);
       }
     };
-    loadUser();
+
+    loadUserFromDB();
   }, []);
 
   const avatarSource =
@@ -30,19 +56,33 @@ export default function Profile() {
       ? require("../../assets/office-woman.png")
       : require("../../assets/office-man.png");
 
-  const handlePress = (section) => {
-    console.log(`Pressed: ${section}`);
-  };
+  /* ================= LOGOUT ================= */
+  const handleLogoutConfirmed = async () => {
+    try {
+      const uid = await AsyncStorage.getItem(
+        "aestheticai:current-user-id"
+      );
 
-  const handleLogout = async () => {
-    console.log("Logging out...");
-    await AsyncStorage.clear();
-    // navigate to login screen here
+      if (uid) {
+        await updateDoc(doc(db, "users", uid), {
+          isOnline: false,
+          lastSeen: serverTimestamp(),
+        });
+      }
+
+      await AsyncStorage.removeItem("aestheticai:current-user-id");
+      await AsyncStorage.clear();
+
+      setLogoutVisible(false);
+      router.replace("/Login");
+    } catch (err) {
+      console.log("Logout error:", err);
+    }
   };
 
   return (
     <View style={styles.page}>
-      {/* Header */}
+      {/* ================= HEADER ================= */}
       <View style={styles.headerWrap}>
         <View style={styles.profileRow}>
           <Image source={avatarSource} style={styles.avatarImage} />
@@ -57,20 +97,18 @@ export default function Profile() {
       </View>
 
       <ScrollView contentContainerStyle={styles.container}>
-      
-
-        {/* Edit Profile */}
-        <TouchableOpacity style={styles.card} onPress={() => handlePress("Edit Profile")}>
+        <TouchableOpacity style={styles.card}>
           <Ionicons name="create-outline" size={30} color="#1E90FF" />
           <View style={styles.cardContent}>
             <Text style={styles.cardTitle}>Edit Profile</Text>
-            <Text style={styles.cardSubtitle}>Update your personal information</Text>
+            <Text style={styles.cardSubtitle}>
+              Update your personal information
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color="#999" />
         </TouchableOpacity>
 
-        {/* Change Password */}
-        <TouchableOpacity style={styles.card} onPress={() => handlePress("Change Password")}>
+        <TouchableOpacity style={styles.card}>
           <Ionicons name="lock-closed-outline" size={30} color="#C44569" />
           <View style={styles.cardContent}>
             <Text style={styles.cardTitle}>Change Password</Text>
@@ -79,47 +117,69 @@ export default function Profile() {
           <Ionicons name="chevron-forward" size={22} color="#999" />
         </TouchableOpacity>
 
-        {/* Manage Subscription */}
-        <TouchableOpacity style={styles.card} onPress={() => handlePress("Manage Subscription")}>
+        <TouchableOpacity style={styles.card}>
           <Ionicons name="card-outline" size={30} color="#2C3E50" />
           <View style={styles.cardContent}>
             <Text style={styles.cardTitle}>Manage Subscription</Text>
-            <Text style={styles.cardSubtitle}>Current plan: {subType || "Free"}</Text>
+            <Text style={styles.cardSubtitle}>
+              Current plan: {subType || "Free"}
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color="#999" />
         </TouchableOpacity>
 
-        {/* ✅ Logout using custom Button */}
         <Button
           icon={<Ionicons name="log-out-outline" size={28} color="#fff" />}
           title="Logout"
           subtitle="Sign out of your account"
-          onPress={handleLogout}
-          style={styles.logoutButton}
+          onPress={() => setLogoutVisible(true)}
           textColor="#fff"
           backgroundColor="#C44569"
         />
       </ScrollView>
 
       <BottomNavbar subType={subType} />
+
+      {/* ================= LOGOUT MODAL ================= */}
+      <Modal visible={logoutVisible} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Confirm Logout</Text>
+            <Text style={styles.modalText}>
+              Are you sure you want to logout?
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setLogoutVisible(false)}
+              >
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.confirmBtn}
+                onPress={handleLogoutConfirmed}
+              >
+                <Text style={styles.confirmText}>Logout</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
+/* ================= STYLES ================= */
+
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: "#F9FAFB" },
-
   headerWrap: {
     paddingTop: 50,
     paddingBottom: 24,
     paddingHorizontal: 24,
     backgroundColor: "#01579B",
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
@@ -133,12 +193,7 @@ const styles = StyleSheet.create({
     borderColor: "#faf9f6",
   },
   profileInfo: { flexDirection: "column" },
-  header: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#faf9f6",
-    letterSpacing: 1.2,
-  },
+  header: { fontSize: 22, fontWeight: "800", color: "#faf9f6" },
   subscription: {
     fontSize: 14,
     color: "#faf9f6",
@@ -151,14 +206,8 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     marginTop: 18,
     backgroundColor: "#faf9f6",
-    shadowColor: "#1E90FF",
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
   },
-
   container: { padding: 20 },
-
   card: {
     flexDirection: "row",
     alignItems: "center",
@@ -166,17 +215,38 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 18,
     marginBottom: 18,
-    shadowColor: "#912f56",
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
     borderWidth: 1,
     borderColor: "#f1f1f1",
   },
   cardContent: { flex: 1, marginLeft: 14 },
   cardTitle: { fontSize: 17, fontWeight: "700", color: "#2C3E50" },
-  cardSubtitle: { fontSize: 13, color: "#7F8C8D", marginTop: 2 },
-
-
-
+  cardSubtitle: {
+    fontSize: 13,
+    color: "#7F8C8D",
+    marginTop: 2,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalBox: {
+    width: "80%",
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 20,
+  },
+  modalTitle: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
+  modalText: { fontSize: 14, color: "#555", marginBottom: 20 },
+  modalActions: { flexDirection: "row", justifyContent: "flex-end" },
+  cancelBtn: { paddingVertical: 8, paddingHorizontal: 16, marginRight: 10 },
+  cancelText: { color: "#555", fontWeight: "600" },
+  confirmBtn: {
+    backgroundColor: "#C44569",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+  },
+  confirmText: { color: "#fff", fontWeight: "700" },
 });

@@ -12,7 +12,13 @@ import {
   where,
 } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { db } from "../../config/firebase";
 import PaymentModal from "../components/PaymentModal";
 
@@ -22,56 +28,45 @@ export default function ChatList() {
   const [currentPaymentData, setCurrentPaymentData] = useState(null);
   const router = useRouter();
 
-  // --- Helper Functions ---
+  /* ================= HELPERS ================= */
+
   const fetchConsultantInfo = async (consultantId) => {
     try {
-      const ref = doc(db, "consultants", consultantId);
-      const snap = await getDoc(ref);
-      return snap.exists() ? snap.data().fullName || "Consultant" : "Consultant";
-    } catch (e) {
-      console.error("Error fetching consultant:", e);
-      return "Consultant";
+      const snap = await getDoc(doc(db, "consultants", consultantId));
+      if (!snap.exists()) return { name: "Consultant" };
+      const c = snap.data();
+      return { name: c.fullName || "Consultant" };
+    } catch {
+      return { name: "Consultant" };
     }
   };
 
-  const parseTime = (dateStr, timeStr) => {
-    if (!dateStr || !timeStr) return null;
-
+  const fetchAppointmentInfo = async (appointmentId) => {
     try {
-      const [timePart, modifier] = timeStr.replace(/\u202F/g, " ").trim().split(" ");
-      let [hours, minutes] = timePart.split(":").map(Number);
-      minutes = minutes || 0;
-
-      if (modifier?.toUpperCase() === "PM" && hours < 12) hours += 12;
-      if (modifier?.toUpperCase() === "AM" && hours === 12) hours = 0;
-
-      const [year, month, day] = dateStr.split("-").map(Number);
-
-      return new Date(year, month - 1, day, hours, minutes);
+      const snap = await getDoc(doc(db, "appointments", appointmentId));
+      if (!snap.exists()) return null;
+      const a = snap.data();
+      return {
+        date: a.date || null,
+        time: a.time || null,
+      };
     } catch {
       return null;
     }
   };
 
-  const isAppointmentActive = (date, startTime) => {
-    const start = parseTime(date, startTime);
-    if (!start) return false;
-    return new Date() >= start;
-  };
-
   const checkPayment = async (room) => {
     try {
-      const paymentQuery = query(
+      const q = query(
         collection(db, "payments"),
         where("userId", "==", room.userId),
         where("consultantId", "==", room.consultantId),
         where("appointmentId", "==", room.appointmentId),
         where("status", "==", "completed")
       );
-      const snapshot = await getDocs(paymentQuery);
-      return !snapshot.empty;
-    } catch (err) {
-      console.error("Error checking payment:", err);
+      const snap = await getDocs(q);
+      return !snap.empty;
+    } catch {
       return false;
     }
   };
@@ -80,30 +75,18 @@ export default function ChatList() {
     const hasPaid = await checkPayment(room);
 
     if (!hasPaid) {
+      const appointment = await fetchAppointmentInfo(room.appointmentId);
+
       setCurrentPaymentData({
         userId: room.userId,
         consultantId: room.consultantId,
         consultantName: room.consultantName,
         appointmentId: room.appointmentId,
-        appointmentDate: room.date,
-        appointmentTime: room.time,
-        amount: 249,
+        appointmentDate: appointment?.date || "TBA",
+        appointmentTime: appointment?.time || "TBA",
       });
+
       setPaymentModalVisible(true);
-      return;
-    }
-
-    if (!room.date || !room.time) {
-      alert(
-        "You have paid, but the consultation is not scheduled yet.\nPlease wait for your consultant to set a schedule."
-      );
-      return;
-    }
-
-    if (!isAppointmentActive(room.date, room.time)) {
-      alert(
-        "Your consultation session is not active yet.\nPlease wait for the scheduled time."
-      );
       return;
     }
 
@@ -111,105 +94,94 @@ export default function ChatList() {
       pathname: "/User/ChatRoom",
       params: {
         roomId: room.id,
+        userId: room.userId,
         consultantId: room.consultantId,
-        appointmentId: room.appointmentId,
-        appointmentDate: room.date,
-        sessionTimeRange: room.time,
-        notes: room.notes || "",
       },
     });
   };
 
-  // --- Load Chat Rooms + Latest Appointment ---
+  /* ================= LOAD CHAT ROOMS ================= */
+
   useEffect(() => {
-    const loadChatRooms = async () => {
+    const loadRooms = async () => {
       const userId = await AsyncStorage.getItem("userUid");
       if (!userId) return;
 
-      const chatQuery = query(
+      const q = query(
         collection(db, "chatRooms"),
         where("userId", "==", userId),
         orderBy("lastMessageAt", "desc")
       );
 
-      const unsubChat = onSnapshot(chatQuery, async (snapshot) => {
-        const rawRooms = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-
-        const roomsWithData = await Promise.all(
-          rawRooms.map(async (room) => {
-            const consultantName = await fetchConsultantInfo(room.consultantId);
-
-            let appointmentData = { date: null, time: null, status: "pending", notes: "", appointmentId: null };
-            const apptQuery = query(
-              collection(db, "appointments"),
-              where("userId", "==", room.userId),
-              where("consultantId", "==", room.consultantId),
-              orderBy("createdAt", "desc")
-            );
-            const apptSnap = await getDocs(apptQuery);
-            if (!apptSnap.empty) {
-              const latest = apptSnap.docs[0].data();
-              appointmentData = {
-                date: latest.date,
-                time: latest.time,
-                status: latest.status,
-                notes: latest.notes,
-                appointmentId: apptSnap.docs[0].id,
-                createdAt: latest.createdAt,
-              };
-            }
-
-            return { ...room, consultantName, ...appointmentData };
+      return onSnapshot(q, async (snap) => {
+        const enriched = await Promise.all(
+          snap.docs.map(async (d) => {
+            const room = { id: d.id, ...d.data() };
+            const consultant = await fetchConsultantInfo(room.consultantId);
+            return {
+              ...room,
+              consultantName: consultant.name,
+            };
           })
         );
-
-        setRooms(roomsWithData);
+        setRooms(enriched);
       });
-
-      return () => unsubChat();
     };
 
-    loadChatRooms();
+    loadRooms();
   }, []);
 
-  const filteredRooms = rooms.reduce((acc, room) => {
-    const key = room.consultantId;
-    const roomCreatedAt = room.createdAt?.toMillis?.() || 0;
-    const existingCreatedAt = acc[key]?.createdAt?.toMillis?.() || 0;
-    if (!acc[key] || roomCreatedAt > existingCreatedAt) acc[key] = room;
-    return acc;
-  }, {});
-
-  const roomList = Object.values(filteredRooms);
+  /* ================= UI ================= */
 
   return (
     <View style={styles.container}>
       {/* HEADER */}
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>Messages</Text>
-        <TouchableOpacity onPress={() => router.push("/User/Consultants")} style={styles.iconButton}>
-          <Ionicons name="people" size={28} color="#0F3E48" />
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.headerTitle}>Messages</Text>
+          <Text style={styles.headerSub}>Your consultations</Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.iconBtn}
+          onPress={() => router.push("/User/Consultants")}
+        >
+          <Ionicons name="people" size={22} color="#FFF" />
         </TouchableOpacity>
       </View>
 
       <FlatList
-        data={roomList}
+        data={rooms}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => {
-          const active = item.status === "accepted" && isAppointmentActive(item.date, item.time);
+        contentContainerStyle={{ paddingBottom: 120 }}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.chatItem}
+            onPress={() => openChatWithPaymentCheck(item)}
+          >
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {item.consultantName?.[0]}
+              </Text>
+            </View>
 
-          return (
-            <TouchableOpacity
-              style={[styles.roomItem, item.unreadForUser && styles.unreadRoom]}
-              onPress={() => openChatWithPaymentCheck(item)}
-            >
-              <Text style={styles.consultantName}>{item.consultantName}</Text>
-              <Text style={styles.lastMessage}>{item.lastMessage || "No messages yet"}</Text>
-              {active && item.unreadForUser && <Text style={styles.newMessage}>● New message</Text>}
-            </TouchableOpacity>
-          );
-        }}
-        ListEmptyComponent={<Text style={styles.emptyListText}>No chat rooms found.</Text>}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.name}>{item.consultantName}</Text>
+              <Text style={styles.message} numberOfLines={1}>
+                {item.lastMessage || "No messages yet"}
+              </Text>
+            </View>
+
+            {item.unreadForUser && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadText}>NEW</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        )}
+        ListEmptyComponent={
+          <Text style={styles.empty}>No conversations yet</Text>
+        }
       />
 
       {currentPaymentData && (
@@ -224,15 +196,66 @@ export default function ChatList() {
   );
 }
 
+/* ================= STYLES ================= */
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F3F9FA" },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16 },
-  title: { fontSize: 24, fontWeight: "700", color: "#0F3E48" },
-  iconButton: { padding: 6, borderRadius: 50, backgroundColor: "#FFF", elevation: 3 },
-  roomItem: { paddingVertical: 14, borderBottomWidth: 1, borderColor: "#ddd", backgroundColor: "#FFF", paddingHorizontal: 10, borderRadius: 6, marginBottom: 6 },
-  unreadRoom: { backgroundColor: "#FFF4F4" },
-  consultantName: { fontSize: 16, fontWeight: "bold", color: "#0F3E48" },
-  lastMessage: { fontSize: 14, color: "gray", marginTop: 4 },
-  newMessage: { color: "red", fontWeight: "bold", marginTop: 4 },
-  emptyListText: { textAlign: "center", marginTop: 20, color: "gray" },
+
+  header: {
+    backgroundColor: "#01579B",
+    paddingTop: 30,
+    paddingBottom: 24,
+    paddingHorizontal: 18,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  headerTitle: { color: "#fff", fontSize: 22, fontWeight: "800" },
+  headerSub: { color: "#E1F5FE", marginTop: 2 },
+
+  iconBtn: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.15)",
+  },
+
+  chatItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    padding: 14,
+    marginHorizontal: 12,
+    marginTop: 10,
+    borderRadius: 14,
+    elevation: 2,
+  },
+
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#0288D1",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  avatarText: { color: "#fff", fontWeight: "800", fontSize: 18 },
+
+  name: { fontSize: 15, fontWeight: "700", color: "#0F3E48" },
+  message: { fontSize: 13, color: "#607D8B", marginTop: 2 },
+
+  unreadBadge: {
+    backgroundColor: "#0288D1",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  unreadText: { color: "#FFF", fontSize: 11, fontWeight: "700" },
+
+  empty: {
+    textAlign: "center",
+    marginTop: 40,
+    color: "#999",
+    fontStyle: "italic",
+  },
 });

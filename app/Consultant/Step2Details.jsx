@@ -169,26 +169,6 @@ export default function Step2Details() {
             : "Fresh Graduate"}
         </Text>
 
-        {/* SPECIALIZATION */}
-        <View style={styles.pickerBox}>
-          <Picker
-            selectedValue={formData.specialization}
-            onValueChange={(v) => handleInputChange("specialization", v)}
-          >
-         <Picker.Item label="Select specialization" value="" />
-<Picker.Item label="Architecture" value="Architecture" />
-<Picker.Item label="Interior Design" value="Interior Design" />
-<Picker.Item label="Civil Engineering" value="Civil Engineering" />
-<Picker.Item label="Structural Engineering" value="Structural Engineering" />
-<Picker.Item label="Electrical Engineering" value="Electrical Engineering" />
-<Picker.Item label="Mechanical Engineering" value="Mechanical Engineering" />
-<Picker.Item label="Sanitary / Plumbing Engineering" value="Sanitary Engineering" />
-<Picker.Item label="Landscape Architecture" value="Landscape Architecture" />
-<Picker.Item label="Construction Management" value="Construction Management" />
-
-          </Picker>
-        </View>
-
         {/* EDUCATION */}
         <View style={styles.pickerBox}>
           <Picker
@@ -197,15 +177,35 @@ export default function Step2Details() {
           >
             <Picker.Item label="Select degree" value="" />
      <Picker.Item label="Bachelor of Science in Architecture" value="BS Architecture" />
-<Picker.Item label="Bachelor of Science in Civil Engineering" value="BSCE" />
-<Picker.Item label="Bachelor of Science in Structural Engineering" value="Structural Engineering" />
-<Picker.Item label="Bachelor of Science in Electrical Engineering" value="BSEE" />
-<Picker.Item label="Bachelor of Science in Sanitary Engineering" valuer="BSSE" />
-<Picker.Item label="Bachelor of Science in Mechanical Engineering" value="BSME" />
-<Picker.Item label="Bachelor of Science in Construction Management" value="Construction Management" />
-<Picker.Item label="Bachelor of Interior Design" value="Interior Design" />
+    <Picker.Item label="Bachelor of Science in Civil Engineering" value="BSCE" />
+<    Picker.Item label="Bachelor of Interior Design" value="Interior Design" />
           </Picker>
         </View>
+               {/* SPECIALIZATION */}
+<View style={styles.pickerBox}>
+  <Picker
+    selectedValue={formData.specialization}
+    onValueChange={(v) => handleInputChange("specialization", v)}
+  >
+    <Picker.Item label="Select specialization" value="" />
+
+    {/* Architecture */}
+    <Picker.Item label="Architectural Design" value="Architectural Design" />
+    <Picker.Item label="Residential Planning" value="Residential Planning" />
+    <Picker.Item label="Sustainable Architecture" value="Sustainable Architecture" />
+
+    {/* Civil Engineering */}
+    <Picker.Item label="Structural Engineering" value="Structural Engineering" />
+    <Picker.Item label="Construction Engineering" value="Construction Engineering" />
+    <Picker.Item label="Geotechnical Engineering" value="Geotechnical Engineering" />
+
+    {/* Interior Design */}
+    <Picker.Item label="Residential Interior Design" value="Residential Interior Design" />
+    <Picker.Item label="Lighting Design" value="Lighting Design" />
+    <Picker.Item label="Furniture Design" value="Furniture Design" />
+  </Picker>
+</View>
+
 
         {/* PROFESSIONAL ONLY */}
         {consultantType === "Professional" && (

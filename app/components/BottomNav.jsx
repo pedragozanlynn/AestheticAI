@@ -80,7 +80,7 @@ export default function BottomNavbar({
     }).start(() => {
 
       // FREE USER >> Redirect when clicking Consultation
-      if (role === "user" && tab.name === "Consultation" && subType !== "Premium") {
+      if (role === "user" && tab.name === "Consultants" && subType !== "Premium") {
         return router.push("/User/UpgradeInfo");
       }
 
@@ -144,7 +144,7 @@ export default function BottomNavbar({
 const styles = StyleSheet.create({
   wrapper: {
     position: "absolute",
-    bottom: 6,
+    bottom: 15,
     width: width,
     alignItems: "center",
   },

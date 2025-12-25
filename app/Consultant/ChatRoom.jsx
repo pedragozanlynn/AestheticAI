@@ -1,10 +1,8 @@
-// app/(Consultant)/ChatRoom.jsx
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -14,117 +12,113 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { db } from "../../config/firebase";
-import {
-  ensureChatRoom,
-  listenToMessages,
-  markConsultantChatAsRead,
-} from "../../services/chatService";
+import { listenToMessages } from "../../services/chatService";
 import { pickFile } from "../../services/fileUploadService";
 import { handleUnsendMessage } from "../../services/handleUnsendMessage";
 import { useSendMessage } from "../../services/useSendMessage";
 
+/* ================= ACTIVE STATUS FORMAT ================= */
+const formatLastSeen = (timestamp) => {
+  if (!timestamp?.toDate) return "Active recently";
+
+  const last = timestamp.toDate();
+  const now = new Date();
+  const diffMs = now - last;
+  const diffMin = Math.floor(diffMs / 60000);
+
+  if (diffMin < 1) return "Active just now";
+  if (diffMin < 60) return `Active ${diffMin} minutes ago`;
+
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24)
+    return `Active ${diffHr} hour${diffHr > 1 ? "s" : ""} ago`;
+
+  const diffDay = Math.floor(diffHr / 24);
+  return `Active ${diffDay} day${diffDay > 1 ? "s" : ""} ago`;
+};
+
 export default function ChatRoom() {
-  const { roomId, userId: routeUserId, appointmentId: routeAppointmentId } =
-    useLocalSearchParams();
+  const { roomId, userId: routeUserId } = useLocalSearchParams();
 
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [consultant, setConsultant] = useState(null);
+  const [chatUser, setChatUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [roomExists, setRoomExists] = useState(false);
 
-  // --- Image Modal State ---
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [modalImageUri, setModalImageUri] = useState(null);
 
-  const flatListRef = useRef();
+  const flatListRef = useRef(null);
   const unsubRef = useRef(null);
 
-  // Load consultant profile
+  /* ================= LOAD CONSULTANT PROFILE ================= */
   useEffect(() => {
     const loadProfile = async () => {
-      try {
-        const keys = await AsyncStorage.getAllKeys();
-        const profileKey = keys.find((k) =>
-          k.startsWith("aestheticai:user-profile:")
-        );
-        if (!profileKey) return;
+      const keys = await AsyncStorage.getAllKeys();
+      const profileKey = keys.find((k) =>
+        k.startsWith("aestheticai:user-profile:")
+      );
+      if (!profileKey) return;
 
-        const raw = await AsyncStorage.getItem(profileKey);
-        if (!raw) return;
+      const raw = await AsyncStorage.getItem(profileKey);
+      if (!raw) return;
 
-        const parsed = JSON.parse(raw);
-        if (!parsed.uid) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed?.uid) return;
 
-        setConsultant({ id: parsed.uid, ...parsed });
-      } catch (e) {
-        console.log("Error loading consultant profile:", e);
-      }
+      setConsultant({ id: parsed.uid, ...parsed });
     };
+
     loadProfile();
   }, []);
 
-  // Initialize chat room
+  /* ================= LOAD CLIENT ================= */
+  useEffect(() => {
+    if (!routeUserId) return;
+
+    const ref = doc(db, "users", routeUserId);
+    const unsub = onSnapshot(ref, (snap) => {
+      if (snap.exists()) setChatUser(snap.data());
+    });
+
+    return () => unsub();
+  }, [routeUserId]);
+
+  /* ================= MARK AS READ ================= */
   useEffect(() => {
     if (!roomId || !consultant?.id) return;
 
-    const init = async () => {
-      setLoading(true);
+    updateDoc(doc(db, "chatRooms", roomId), {
+      unreadForConsultant: false,
+    }).catch(() => {});
+  }, [roomId, consultant]);
 
-      try {
-        if (!routeUserId) {
-          console.warn("ChatRoom missing userId — cannot create room.");
-          setLoading(false);
-          return;
-        }
+  /* ================= LISTEN TO MESSAGES ================= */
+  useEffect(() => {
+    if (!roomId || !consultant?.id) return;
 
-        await ensureChatRoom(
-          roomId,
-          routeUserId,
-          consultant.id,
-          routeAppointmentId && routeAppointmentId !== "null"
-            ? routeAppointmentId
-            : null
-        );
+    setLoading(true);
+    try {
+      unsubRef.current = listenToMessages(roomId, (msgs) => {
+        setMessages(msgs);
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 50);
+      });
+    } finally {
+      setLoading(false);
+    }
 
-        unsubRef.current = listenToMessages(roomId, (msgs) => {
-          setMessages(msgs);
-          setTimeout(
-            () => flatListRef.current?.scrollToEnd({ animated: true }),
-            50
-          );
-        });
+    return () => unsubRef.current?.();
+  }, [roomId, consultant]);
 
-        markConsultantChatAsRead(roomId).catch((e) =>
-          console.warn("markConsultantChatAsRead error:", e)
-        );
-
-        setRoomExists(true);
-        setLoading(false);
-      } catch (err) {
-        console.error("ChatRoom init error:", err);
-        setLoading(false);
-      }
-    };
-
-    init();
-
-    return () => {
-      if (unsubRef.current) {
-        try {
-          unsubRef.current();
-        } catch {}
-        unsubRef.current = null;
-      }
-    };
-  }, [roomId, consultant, routeUserId, routeAppointmentId]);
-
-  // --- Integrate useSendMessage hook ---
+  /* ================= SEND MESSAGE ================= */
   const { sendTextMessage, sendFileMessage } = useSendMessage({
     roomId,
     senderId: consultant?.id,
@@ -132,26 +126,6 @@ export default function ChatRoom() {
     setMessages,
   });
 
- // MARK AS COMPLETE
-const handleMarkComplete = async () => {
-  if (!roomId || !consultant?.id) return;
-
-  try {
-    const roomRef = doc(db, "chatRooms", roomId);
-    await updateDoc(roomRef, {
-      status: "completed",
-      completedAt: new Date(),
-    });
-
-    console.log("✅ Chat marked as complete by consultant:", roomId); // <-- LOG HERE
-    Alert.alert("Success", "This chat has been marked as complete.");
-  } catch (err) {
-    console.error("Error marking complete:", err);
-    Alert.alert("Error", "Failed to mark chat as complete.");
-  }
-};
-
-  // HANDLERS
   const handleSend = async () => {
     if (!text.trim()) return;
     await sendTextMessage(text.trim());
@@ -168,13 +142,25 @@ const handleMarkComplete = async () => {
     await handleUnsendMessage(msg, roomId, consultant.id, setMessages);
   };
 
-  // RENDER MESSAGE
+  /* ================= MARK AS COMPLETE ================= */
+  const handleMarkComplete = async () => {
+    await updateDoc(doc(db, "chatRooms", roomId), {
+      status: "completed",
+      completedAt: new Date(),
+    });
+  };
+
+  /* ================= RENDER MESSAGE ================= */
   const renderMsg = ({ item }) => {
     const isMe = item.senderType === "consultant";
+    const textColor = isMe ? "#fff" : "#000";
 
     const Wrapper = ({ children }) => (
       <TouchableOpacity
-        style={[styles.message, isMe ? styles.myMessage : styles.theirMessage]}
+        style={[
+          styles.message,
+          isMe ? styles.myMessage : styles.theirMessage,
+        ]}
         onLongPress={() => isMe && !item.unsent && handleUnsend(item)}
       >
         {children}
@@ -184,14 +170,14 @@ const handleMarkComplete = async () => {
     if (item.unsent) {
       return (
         <Wrapper>
-          <Text style={[styles.messageText, styles.unsent, { color: "#999" }]}>
+          <Text style={{ fontStyle: "italic", color: textColor }}>
             🚫 Message unsent
           </Text>
         </Wrapper>
       );
     }
 
-    if (item.type === "image" && (item.fileUrl || item.localUri)) {
+    if (item.type === "image") {
       const imageUri = item.fileUrl || item.localUri;
       return (
         <Wrapper>
@@ -201,68 +187,80 @@ const handleMarkComplete = async () => {
               setImageModalVisible(true);
             }}
           >
-            <Image
-              source={{ uri: imageUri }}
-              style={styles.image}
-              resizeMode="cover"
-            />
+            <Image source={{ uri: imageUri }} style={styles.image} />
           </TouchableOpacity>
-          <Text style={{ marginTop: 5, color: isMe ? "#fff" : "#000", fontSize: 12 }}>
-            {item.fileName}
-          </Text>
-          {isMe && item.failed && <Text style={styles.failed}>failed</Text>}
-          {isMe && item.sending && <Text style={styles.pending}>uploading...</Text>}
-        </Wrapper>
-      );
-    }
-
-    if (item.type === "file") {
-      return (
-        <Wrapper>
-          <Text style={[styles.messageText, { color: isMe ? "#fff" : "#000" }]}>
-            📄 {item.fileName}
-          </Text>
-          {isMe && item.failed && <Text style={styles.failed}>failed</Text>}
-          {isMe && item.sending && <Text style={styles.pending}>uploading...</Text>}
         </Wrapper>
       );
     }
 
     return (
       <Wrapper>
-        <Text style={[styles.messageText, { color: isMe ? "#fff" : "#000" }]}>{item.text}</Text>
-        {isMe && item.failed && <Text style={styles.failed}>failed</Text>}
-        {isMe && item.sending && <Text style={styles.pending}>sending...</Text>}
+        <Text style={{ color: textColor }}>{item.text}</Text>
       </Wrapper>
     );
   };
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: "#fff" }}
+      style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={styles.container}>
-        <Text style={styles.header}>Consultant Chat Room</Text>
+        {/* ================= HEADER ================= */}
+        <View style={styles.chatHeader}>
+          <View style={styles.avatar}>
+            <Image
+              source={
+                chatUser?.gender === "Female"
+                  ? require("../../assets/office-woman.png")
+                  : require("../../assets/office-man.png")
+              }
+              style={styles.avatarImage}
+            />
+          </View>
+
+          <View>
+            <Text style={styles.chatName}>
+              {chatUser?.name || "Client"}
+            </Text>
+            <Text
+              style={[
+                styles.chatStatus,
+                { color: chatUser?.isOnline ? "#4CAF50" : "#999" },
+              ]}
+            >
+              {chatUser?.isOnline
+                ? "Active now"
+                : formatLastSeen(chatUser?.lastSeen)}
+            </Text>
+          </View>
+        </View>
 
         {loading ? (
-          <ActivityIndicator size="small" color="#0F3E48" />
-        ) : !roomExists ? (
-          <Text style={{ padding: 20, color: "#333" }}>
-            Chat room not available. Make sure the appointment is accepted.
-          </Text>
+          <ActivityIndicator />
         ) : (
           <FlatList
             ref={flatListRef}
             data={messages}
             renderItem={renderMsg}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={{ paddingBottom: 160 }}
+            contentContainerStyle={{ paddingBottom: 180 }}
           />
         )}
 
+        {/* ===== MARK AS COMPLETE BUTTON ===== */}
+        <View style={styles.completeWrap}>
+          <TouchableOpacity
+            style={styles.completeBtn}
+            onPress={handleMarkComplete}
+          >
+            <Text style={styles.completeText}>Mark as Complete</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ================= INPUT ================= */}
         <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.attachBtn} onPress={handleFileSend}>
+          <TouchableOpacity onPress={handleFileSend}>
             <Text style={styles.attachText}>📎</Text>
           </TouchableOpacity>
 
@@ -273,50 +271,24 @@ const handleMarkComplete = async () => {
             placeholder="Type a message..."
           />
 
-          <TouchableOpacity
-            style={styles.sendBtn}
-            onPress={handleSend}
-            disabled={!roomExists}
-          >
-            <Text style={{ color: "#fff", fontWeight: "700" }}>Send</Text>
+          <TouchableOpacity style={styles.sendBtn} onPress={handleSend}>
+            <Text style={styles.sendText}>Send</Text>
           </TouchableOpacity>
         </View>
-
-        {roomExists && (
-          <TouchableOpacity
-            style={styles.completeOutlineBtn}
-            onPress={handleMarkComplete}
-          >
-            <Text style={styles.completeOutlineText}>Mark as Complete</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
-      {/* --- Image Modal --- */}
-      <Modal
-        visible={imageModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setImageModalVisible(false)}
-      >
+      <Modal visible={imageModalVisible} transparent animationType="fade">
         <View style={styles.modalBackground}>
-          {modalImageUri ? (
-            <Image source={{ uri: modalImageUri }} style={styles.modalImage} resizeMode="contain" />
-          ) : (
-            <ActivityIndicator size="large" color="#fff" />
-          )}
+          <Image
+            source={{ uri: modalImageUri }}
+            style={styles.modalImage}
+            resizeMode="contain"
+          />
           <TouchableOpacity
-            style={{
-              position: "absolute",
-              top: 40,
-              right: 20,
-              padding: 10,
-              backgroundColor: "rgba(255,255,255,0.3)",
-              borderRadius: 20,
-            }}
+            style={styles.closeBtn}
             onPress={() => setImageModalVisible(false)}
           >
-            <Text style={{ color: "#fff", fontWeight: "bold" }}>Close</Text>
+            <Text style={styles.closeText}>Close</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -324,43 +296,105 @@ const handleMarkComplete = async () => {
   );
 }
 
+/* ================= STYLES ================= */
+
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 15, paddingTop: 40 },
-  header: { fontSize: 22, fontWeight: "900", color: "#0F3E48", marginBottom: 15 },
-  message: { padding: 10, marginVertical: 6, maxWidth: "75%", borderRadius: 10 },
-  myMessage: { alignSelf: "flex-end", backgroundColor: "#0F3E48" },
-  theirMessage: { alignSelf: "flex-start", backgroundColor: "#E6E6E6" },
-  messageText: { color: "#fff" },
-  pending: { color: "#ccc", fontSize: 10, marginTop: 3 },
-  failed: { color: "red", fontSize: 10, marginTop: 3 },
-  unsent: { color: "#999", fontSize: 10, marginTop: 3, fontStyle: "italic" },
+
+  chatHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderColor: "#E4E6EB",
+    marginBottom: 10,
+  },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    overflow: "hidden",
+    backgroundColor: "#E4E6EB",
+    marginRight: 10,
+  },
+  avatarImage: { width: "100%", height: "100%" },
+
+  chatName: { fontSize: 16, fontWeight: "700" },
+  chatStatus: { fontSize: 12 },
+
+  message: {
+    padding: 10,
+    marginVertical: 6,
+    maxWidth: "75%",
+    borderRadius: 16,
+  },
+  myMessage: { alignSelf: "flex-end", backgroundColor: "#0084FF" },
+  theirMessage: { alignSelf: "flex-start", backgroundColor: "#E4E6EB" },
+
+  completeWrap: {
+    position: "absolute",
+    bottom: 60,
+    left: 0,
+    right: 0,
+    alignItems: "flex-start", // ✅ FIX
+    paddingLeft: 15,          // optional para may konting margin sa kaliwa
+  },
+  completeBtn: {
+    borderWidth: 1,
+    borderColor: "#008000",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  completeText: {
+    color: "#008000",
+    fontWeight: "700",
+  },
+  
   inputContainer: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
     flexDirection: "row",
+    alignItems: "center",
     padding: 10,
+    backgroundColor: "#F0F2F5",
+  },
+  attachText: { fontSize: 22, marginRight: 10 },
+  input: {
+    flex: 1,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
     backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderColor: "#ccc",
+    borderRadius: 20,
   },
-  attachBtn: { justifyContent: "center", marginRight: 10 },
-  attachText: { fontSize: 22 },
-  input: { flex: 1, padding: 10, backgroundColor: "#F5F5F5", borderRadius: 10 },
-  sendBtn: { marginLeft: 10, backgroundColor: "#0F3E48", paddingVertical: 10, paddingHorizontal: 15, borderRadius: 10 },
-  completeOutlineBtn: {
-    borderWidth: 1.5,
-    borderColor: "#2ecc71",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    alignSelf: "flex-start",
-    marginBottom: 58,
+  sendBtn: {
+    marginLeft: 10,
+    backgroundColor: "#0084FF",
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 20,
   },
-  completeOutlineText: { color: "#2ecc71", fontSize: 14, fontWeight: "700" },
-  // --- Image modal styles ---
+  sendText: { color: "#fff", fontWeight: "700" },
+
   image: { width: 150, height: 150, borderRadius: 10 },
-  modalBackground: { flex: 1, backgroundColor: "rgba(0,0,0,0.9)", justifyContent: "center", alignItems: "center" },
+
+  modalBackground: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   modalImage: { width: "90%", height: "80%" },
+
+  closeBtn: {
+    position: "absolute",
+    top: 40,
+    right: 20,
+    padding: 10,
+    backgroundColor: "rgba(255,255,255,0.3)",
+    borderRadius: 20,
+  },
+  closeText: { color: "#fff", fontWeight: "700" },
 });

@@ -8,6 +8,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import useSubscriptionType from "../../services/useSubscriptionType";
@@ -18,42 +19,44 @@ export default function Project() {
   const subType = useSubscriptionType();
   const [projects, setProjects] = useState([]);
 
-  useEffect(() => {
-    const loadProjects = async () => {
-      try {
-        const keys = await AsyncStorage.getAllKeys();
-        const projectKeys = keys.filter((k) =>
-          k.startsWith("aestheticai:project-image:")
-        );
-        const items = await AsyncStorage.multiGet(projectKeys);
-        const parsed = items.map(([key, value]) => {
-          const data = JSON.parse(value);
-          return {
-            id: key,
-            title: data.title || "Untitled Project",
-            image: data.image,
-            date: data.date || new Date().toISOString().split("T")[0],
-            tag: data.tag || "Room",
-          };
-        });
+  const loadProjects = async () => {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const projectKeys = keys.filter((k) =>
+        k.startsWith("aestheticai:project-image:")
+      );
+      const items = await AsyncStorage.multiGet(projectKeys);
 
-        if (parsed.length === 0) {
-          setProjects([
-            {
-              id: "static-1",
-              title: "Modern Living Room",
-              image: require("../../assets/livingroom.jpg"),
-              date: "2025-12-20",
-              tag: "Living Room",
-            },
-          ]);
-        } else {
-          setProjects(parsed);
-        }
-      } catch (err) {
-        console.log("Error loading projects:", err);
+      const parsed = items.map(([key, value]) => {
+        const data = JSON.parse(value);
+        return {
+          id: key,
+          title: data.title || "Untitled Project",
+          image: data.image,
+          date: data.date || new Date().toISOString().split("T")[0],
+          tag: data.tag || "Room",
+        };
+      });
+
+      if (parsed.length === 0) {
+        setProjects([
+          {
+            id: "static-1",
+            title: "Modern Living Room",
+            image: require("../../assets/livingroom.jpg"),
+            date: "2025-12-20",
+            tag: "Living Room",
+          },
+        ]);
+      } else {
+        setProjects(parsed);
       }
-    };
+    } catch (err) {
+      console.log("Error loading projects:", err);
+    }
+  };
+
+  useEffect(() => {
     loadProjects();
   }, []);
 
@@ -61,17 +64,49 @@ export default function Project() {
     router.push(`/User/RoomVisualization?id=${project.id}`);
   };
 
+  // ✅ DELETE PROJECT (LONG PRESS)
+  const handleDeleteProject = (projectId) => {
+    Alert.alert(
+      "Delete Project",
+      "Are you sure you want to delete this project?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem(projectId);
+              loadProjects(); // refresh list
+            } catch (e) {
+              console.log("Delete error:", e);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
-    <View style={styles.page}>
-      {/* ✅ Aesthetic Header */}
-      <View style={styles.titleWrap}>
-        <Text style={styles.header}>Saved Projects</Text>
-        <Text style={styles.subtitle}>
-          All your AI‑generated room designs in one place
-        </Text>
-        <View style={styles.divider} />
+    <View style={styles.container}>
+      {/* ===== HEADER ===== */}
+      <View style={styles.chatHeaderRow}>
+        <View style={styles.chatHeaderLeft}>
+          <View style={styles.headerAvatar}>
+            <Ionicons name="albums" size={20} color="#0F3E48" />
+          </View>
+          <View>
+            <Text style={styles.chatTitle}>Saved Projects</Text>
+            <Text style={styles.chatSubtitle}>
+              {projects.length} project(s)
+            </Text>
+          </View>
+        </View>
       </View>
 
+      <View style={styles.headerDivider} />
+
+      {/* ===== PROJECT LIST ===== */}
       <ScrollView contentContainerStyle={styles.gallery}>
         {projects.length > 0 ? (
           <View style={styles.grid}>
@@ -81,6 +116,7 @@ export default function Project() {
                 style={styles.card}
                 activeOpacity={0.9}
                 onPress={() => openVisualization(project)}
+                onLongPress={() => handleDeleteProject(project.id)} // ✅ LONG PRESS
               >
                 <Image
                   source={
@@ -116,56 +152,54 @@ export default function Project() {
   );
 }
 
+/* ================= STYLES ================= */
+
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#F9FAFB" },
-
-  // ✅ Header section
-  titleWrap: {
-    paddingTop: 60,
-    paddingHorizontal: 24,
-    alignItems: "flex-start",
-    backgroundColor: "#faf9f6", // soft pastel background
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24, // rounded bottom corners
+  container: {
+    flex: 1,
+    backgroundColor: "#F3F9FA",
   },
-  header: {
-    fontSize: 25,
+
+  chatHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: 30,
+    paddingBottom: 20,
+    paddingHorizontal: 16,
+  },
+  chatHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  headerAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#E3F2FD",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  chatTitle: {
+    fontSize: 18,
     fontWeight: "800",
-    color: "#912f56", // maroon accent
-    letterSpacing: 1.5,
-    textAlign: "left",
-    marginBottom: 6,
+    color: "#0F3E48",
   },
-  subtitle: {
-    fontSize: 14,
-    color: "#6c757d", // softer gray
-    marginTop: 2,
-    fontStyle: "italic",
-    textAlign: "left",
-    lineHeight: 22,
+  chatSubtitle: {
+    fontSize: 12,
+    color: "#777",
   },
-  divider: {
-    width: "100%",
-    height: 5,
-    borderRadius: 3,
-    marginTop: 11,
-    marginBottom: 12,
-    backgroundColor: "#912f56",
-    shadowColor: "#1E90FF",
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
+  headerDivider: {
+    height: 1,
+    backgroundColor: "#E4E6EB",
+    marginBottom: 10,
   },
 
-  gallery: { paddingHorizontal: 20, paddingBottom: 100 },
+  gallery: {
+    paddingHorizontal: 20,
+    paddingBottom: 120,
+  },
 
-  // ✅ Grid layout
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -179,18 +213,16 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     backgroundColor: "#FFF",
     elevation: 6,
-    shadowColor: "#912f56", // subtle colored shadow
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
     borderWidth: 1,
     borderColor: "#f1f1f1",
   },
+
   image: {
     width: "100%",
     height: 170,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
   },
 
   overlay: {
@@ -201,11 +233,18 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     backgroundColor: "rgba(0,0,0,0.45)",
-    borderBottomLeftRadius: 22,
-    borderBottomRightRadius: 22,
   },
-  title: { color: "#FFF", fontSize: 16, fontWeight: "700", textAlign: "left" },
-  date: { color: "#E1F5FE", fontSize: 12, marginTop: 2, textAlign: "left" },
+
+  title: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  date: {
+    color: "#E1F5FE",
+    fontSize: 12,
+    marginTop: 2,
+  },
 
   chip: {
     marginTop: 8,
@@ -214,9 +253,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 16,
-    shadowColor: "#912f56",
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
   },
   chipText: {
     fontSize: 12,
@@ -233,9 +269,6 @@ const styles = StyleSheet.create({
     borderRadius: 60,
     padding: 20,
     marginBottom: 14,
-    shadowColor: "#912f56",
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
   },
   emptyIcon: {
     fontSize: 46,
@@ -246,6 +279,5 @@ const styles = StyleSheet.create({
     color: "#912f56",
     fontStyle: "italic",
     fontSize: 17,
-    letterSpacing: 0.5,
   },
 });

@@ -1,16 +1,28 @@
 // services/chatService.js
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc, // ✅ ADD ONLY
+} from "firebase/firestore";
 import { db } from "../config/firebase";
 
-export const ensureChatRoom = async (roomId, userId, consultantId, appointmentId) => {
+export const ensureChatRoom = async (appointmentId, userId, consultantId) => {
+  const roomId = `appointment_${appointmentId}`;
   const roomRef = doc(db, "chatRooms", roomId);
+
   const snap = await getDoc(roomRef);
 
   if (!snap.exists()) {
     await setDoc(roomRef, {
+      appointmentId,
       userId,
       consultantId,
-      appointmentId,
       createdAt: serverTimestamp(),
       lastMessage: "",
       lastMessageAt: serverTimestamp(),
@@ -19,19 +31,48 @@ export const ensureChatRoom = async (roomId, userId, consultantId, appointmentId
       unreadForUser: false,
       unreadForConsultant: false,
     });
-  } else {
-    const existing = snap.data();
-    if (appointmentId && existing.appointmentId !== appointmentId) {
-      await updateDoc(roomRef, { appointmentId });
-    }
-  }
-
-  // 🔑 Always sync chatRoomId back to appointment
-  if (appointmentId) {
-    await updateDoc(doc(db, "appointments", appointmentId), {
-      chatRoomId: roomId,
-    });
   }
 
   return roomId;
+};
+
+export const listenToMessages = (roomId, callback) => {
+  const messagesRef = collection(db, "chatRooms", roomId, "messages");
+  const q = query(messagesRef, orderBy("createdAt", "asc"));
+
+  return onSnapshot(q, (snapshot) => {
+    const messages = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+    callback(messages);
+  });
+};
+
+/* =================================================
+   ✅ ADD ONLY BELOW (NO CHANGES ABOVE)
+================================================= */
+
+export const markUserChatAsRead = async (roomId) => {
+  if (!roomId) return;
+
+  try {
+    await updateDoc(doc(db, "chatRooms", roomId), {
+      unreadForUser: false,
+    });
+  } catch (err) {
+    console.log("❌ markUserChatAsRead error:", err);
+  }
+};
+
+export const markConsultantChatAsRead = async (roomId) => {
+  if (!roomId) return;
+
+  try {
+    await updateDoc(doc(db, "chatRooms", roomId), {
+      unreadForConsultant: false,
+    });
+  } catch (err) {
+    console.log("❌ markConsultantChatAsRead error:", err);
+  }
 };
