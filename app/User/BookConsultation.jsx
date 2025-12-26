@@ -1,8 +1,22 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { addDoc, collection, doc, getDoc, serverTimestamp } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { auth, db } from "../../config/firebase";
+
+const PRIMARY = "#2c4f4f";
 
 export default function BookConsultation() {
   const router = useRouter();
@@ -11,26 +25,21 @@ export default function BookConsultation() {
   const [consultant, setConsultant] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Load the REAL consultant Firestore doc using consultantId passed from previous page
+  /* ================= FETCH CONSULTANT ================= */
   useEffect(() => {
     const fetchConsultant = async () => {
       try {
-        console.log("📌 Route consultantId:", consultantId);
-
         const ref = doc(db, "consultants", consultantId);
         const snap = await getDoc(ref);
 
         if (snap.exists()) {
-          console.log("📌 Found consultant doc:", snap.id);
           setConsultant({
-            id: snap.id, // REAL FIRESTORE DOC ID
+            id: snap.id,
             ...snap.data(),
           });
-        } else {
-          console.log("❌ Consultant not found.");
         }
       } catch (error) {
-        console.log("❌ Error fetching consultant: ", error);
+        console.log("❌ Error fetching consultant:", error);
       } finally {
         setLoading(false);
       }
@@ -39,20 +48,18 @@ export default function BookConsultation() {
     fetchConsultant();
   }, [consultantId]);
 
-  // Save the appointment for the correct consultant
+  /* ================= CONFIRM BOOKING ================= */
   const handleConfirm = async () => {
     try {
       if (!consultant?.id) {
-        alert("Error: consultant ID missing");
+        alert("Consultant not found.");
         return;
       }
 
       const userId = auth.currentUser?.uid;
 
-      console.log("📌 Saving appointment with consultantId:", consultant.id);
-
       await addDoc(collection(db, "appointments"), {
-        consultantId: consultant.id,       // <<<<< FIXED
+        consultantId: consultant.id,
         userId,
         date,
         time,
@@ -61,7 +68,7 @@ export default function BookConsultation() {
         createdAt: serverTimestamp(),
       });
 
-      alert("Appointment Request Sent!");
+      alert("Appointment request sent!");
       router.replace("/User/Home");
     } catch (err) {
       console.log("❌ Error saving appointment:", err);
@@ -69,10 +76,11 @@ export default function BookConsultation() {
     }
   };
 
+  /* ================= LOADING ================= */
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#000" />
+        <ActivityIndicator size="large" color={PRIMARY} />
       </View>
     );
   }
@@ -85,32 +93,33 @@ export default function BookConsultation() {
     );
   }
 
+  /* ================= UI ================= */
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Review Appointment</Text>
+      <Text style={styles.subtitle}>
+        Please review the details before confirming
+      </Text>
 
+      {/* CONSULTANT INFO */}
       <View style={styles.card}>
-        <Text style={styles.label}>Consultant</Text>
-        <Text style={styles.value}>{consultant.fullName}</Text>
+        <Text style={styles.section}>Consultant</Text>
 
-        <Text style={styles.label}>Specialization</Text>
-        <Text style={styles.value}>{consultant.specialization}</Text>
-
-        <Text style={styles.label}>Consultant Type</Text>
-        <Text style={styles.value}>{consultant.consultantType}</Text>
+        <Info label="Name" value={consultant.fullName} />
+        <Info label="Specialization" value={consultant.specialization} />
+        <Info label="Type" value={consultant.consultantType} />
       </View>
 
+      {/* APPOINTMENT INFO */}
       <View style={styles.card}>
-        <Text style={styles.label}>Date</Text>
-        <Text style={styles.value}>{date}</Text>
+        <Text style={styles.section}>Schedule</Text>
 
-        <Text style={styles.label}>Time</Text>
-        <Text style={styles.value}>{time}</Text>
-
-        <Text style={styles.label}>Notes</Text>
-        <Text style={styles.value}>{notes || "No message provided"}</Text>
+        <Info label="Date" value={date} />
+        <Info label="Time" value={time} />
+        <Info label="Notes" value={notes || "No message provided"} />
       </View>
 
+      {/* CTA */}
       <TouchableOpacity style={styles.button} onPress={handleConfirm}>
         <Text style={styles.buttonText}>Confirm Booking</Text>
       </TouchableOpacity>
@@ -118,13 +127,98 @@ export default function BookConsultation() {
   );
 }
 
+/* ================= SMALL COMPONENT ================= */
+
+const Info = ({ label, value }) => (
+  <View style={styles.row}>
+    <Text style={styles.label}>{label}</Text>
+    <Text style={styles.value}>{value}</Text>
+  </View>
+);
+
+/* ================= STYLES ================= */
+
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#fff" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  title: { fontSize: 24, fontWeight: "700", marginBottom: 20, textAlign: "center" },
-  card: { backgroundColor: "#F4F4F4", padding: 15, borderRadius: 12, marginBottom: 15 },
-  label: { fontSize: 14, fontWeight: "600", color: "#666" },
-  value: { fontSize: 16, fontWeight: "500", marginBottom: 10 },
-  button: { backgroundColor: "#3A7AFE", paddingVertical: 15, borderRadius: 12, marginTop: 10 },
-  buttonText: { color: "#fff", textAlign: "center", fontSize: 18, fontWeight: "600" },
+  container: {
+    flex: 1,
+    backgroundColor: "#faf9f6",
+    padding: 22,
+  },
+
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  title: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: PRIMARY,
+    textAlign: "center",
+    marginTop: 10,
+  },
+
+  subtitle: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 24,
+  },
+
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E1E8EA",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+
+  section: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: PRIMARY,
+    marginBottom: 12,
+  },
+
+  row: {
+    marginBottom: 10,
+  },
+
+  label: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#777",
+  },
+
+  value: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#333",
+    marginTop: 2,
+  },
+
+  button: {
+    backgroundColor: PRIMARY,
+    paddingVertical: 16,
+    borderRadius: 16,
+    marginTop: 10,
+    shadowColor: PRIMARY,
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+
+  buttonText: {
+    color: "#fff",
+    textAlign: "center",
+    fontSize: 17,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
 });

@@ -9,27 +9,22 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
-/* ---------------- SAFE HELPERS ---------------- */
+/* ---------------- HELPERS ---------------- */
 
-const safeLower = (v) =>
-  typeof v === "string" ? v.toLowerCase() : "";
+const safeLower = (v) => (typeof v === "string" ? v.toLowerCase() : "");
 
 const parseTimeRange = (range) => {
   if (!range || typeof range !== "string") return null;
-
   const [start, end] = range.split(" - ");
   if (!start || !end) return null;
-
   return { start, end };
 };
 
 const toDateTime = (timeStr) => {
   if (!timeStr) return null;
-
   const [time, modifier] = timeStr.split(" ");
-  if (!time || !modifier) return null;
-
   let [hours, minutes] = time.split(":").map(Number);
 
   if (modifier === "PM" && hours !== 12) hours += 12;
@@ -39,6 +34,8 @@ const toDateTime = (timeStr) => {
   d.setHours(hours, minutes, 0, 0);
   return d;
 };
+
+const PRIMARY = "#2c4f4f";
 
 /* ---------------- COMPONENT ---------------- */
 
@@ -60,8 +57,8 @@ export default function ScheduleModal({
   const [notes, setNotes] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
-  const formatTime = (time) =>
-    time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const formatTime = (t) =>
+    t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   const getDayName = (d) =>
     d.toLocaleDateString("en-US", { weekday: "long" });
@@ -69,61 +66,51 @@ export default function ScheduleModal({
   /* ---------------- VALIDATION ---------------- */
 
   useEffect(() => {
-    if (!Array.isArray(availability) || availability.length === 0) {
+    if (!availability.length) {
       setErrorMsg("Consultant has no available schedule.");
       return;
     }
 
     const dayName = getDayName(date);
 
-    const match = availability.find(
-      (a) => safeLower(a?.day) === safeLower(dayName)
+    const match = availability.find((a) =>
+      typeof a === "string"
+        ? safeLower(a) === safeLower(dayName)
+        : safeLower(a?.day) === safeLower(dayName)
     );
 
     if (!match) {
-      setErrorMsg(`Consultant is not available on ${dayName}.`);
+      setErrorMsg(`Not available on ${dayName}.`);
       return;
     }
 
-    // ✅ DAY-ONLY availability → allow ANY time
     if (!match.am && !match.pm) {
       setErrorMsg("");
       return;
     }
 
     const start = startTime;
+    let valid = false;
 
     const am = parseTimeRange(match.am);
     const pm = parseTimeRange(match.pm);
 
-    let valid = false;
-
     if (am) {
-      const amStart = toDateTime(am.start);
-      const amEnd = toDateTime(am.end);
-      if (amStart && amEnd && start >= amStart && start <= amEnd) {
-        valid = true;
-      }
+      const s = toDateTime(am.start);
+      const e = toDateTime(am.end);
+      if (s && e && start >= s && start <= e) valid = true;
     }
 
     if (pm) {
-      const pmStart = toDateTime(pm.start);
-      const pmEnd = toDateTime(pm.end);
-      if (pmStart && pmEnd && start >= pmStart && start <= pmEnd) {
-        valid = true;
-      }
+      const s = toDateTime(pm.start);
+      const e = toDateTime(pm.end);
+      if (s && e && start >= s && start <= e) valid = true;
     }
 
-    if (!valid) {
-      setErrorMsg(
-        `Not available at ${formatTime(start)}. Please choose another time.`
-      );
-    } else {
-      setErrorMsg("");
-    }
+    setErrorMsg(valid ? "" : "Choose a time within consultant availability.");
   }, [date, startTime, availability]);
 
-  /* ---------------- CONTINUE ---------------- */
+  /* ---------------- SUBMIT ---------------- */
 
   const handleContinue = () => {
     if (errorMsg) return;
@@ -146,14 +133,20 @@ export default function ScheduleModal({
     <Modal visible={visible} transparent animationType="slide">
       <View style={styles.overlay}>
         <View style={styles.modalBox}>
-          <Text style={styles.title}>Set Consultation Schedule</Text>
+          {/* HEADER */}
+          <View style={styles.header}>
+            <Text style={styles.title}>Schedule Consultation</Text>
+          </View>
+
+          <View style={styles.divider} />
 
           {/* DATE */}
           <TouchableOpacity
             style={styles.input}
             onPress={() => setShowDatePicker(true)}
           >
-            <Text style={styles.inputText}>📅 {date.toDateString()}</Text>
+            <Ionicons name="calendar" size={18} color={PRIMARY} />
+            <Text style={styles.inputText}>{date.toDateString()}</Text>
           </TouchableOpacity>
 
           {showDatePicker && (
@@ -173,8 +166,9 @@ export default function ScheduleModal({
             style={styles.input}
             onPress={() => setShowStartPicker(true)}
           >
+            <Ionicons name="time" size={18} color={PRIMARY} />
             <Text style={styles.inputText}>
-              ⏰ Start: {formatTime(startTime)}
+              Start Time: {formatTime(startTime)}
             </Text>
           </TouchableOpacity>
 
@@ -192,18 +186,34 @@ export default function ScheduleModal({
           {/* NOTES */}
           <TextInput
             style={styles.textArea}
-            placeholder="Notes for consultant / payment (optional)"
+            placeholder="Notes for consultant (optional)"
             value={notes}
             onChangeText={setNotes}
             multiline
           />
 
-          <Text style={styles.paymentNote}>
-            💰 This session has a fee of ₱{sessionFee}.
-          </Text>
+          {/* SESSION FEE MESSAGE (YOUR TEXT) */}
+          <View style={styles.feeReminder}>
+            <Ionicons name="information-circle" size={20} color={PRIMARY} />
+            <Text style={styles.feeDesc}>
+              A one-time payment of{" "}
+              <Text style={styles.bold}>₱{sessionFee}</Text> is required.
+              {"\n"}
+              After payment, your consultation chat will be{" "}
+              <Text style={styles.bold}>open for 12 hours only</Text>.
+              {"\n"}
+              Please complete your discussion within this time.
+            </Text>
+          </View>
 
-          {!!errorMsg && <Text style={styles.error}>{errorMsg}</Text>}
+          {!!errorMsg && (
+            <View style={styles.errorBox}>
+              <Ionicons name="alert-circle" size={18} color="#c62828" />
+              <Text style={styles.error}>{errorMsg}</Text>
+            </View>
+          )}
 
+          {/* ACTIONS */}
           <View style={styles.row}>
             <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
               <Text style={styles.cancelText}>Cancel</Text>
@@ -212,7 +222,7 @@ export default function ScheduleModal({
             <TouchableOpacity
               style={[
                 styles.continueBtn,
-                errorMsg && { backgroundColor: "#777" },
+                errorMsg && styles.disabledBtn,
               ]}
               disabled={!!errorMsg}
               onPress={handleContinue}
@@ -232,52 +242,94 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: "rgba(0,0,0,0.45)",
   },
   modalBox: {
-    backgroundColor: "#fff",
-    padding: 20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: "#faf9f6",
+    padding: 22,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
   },
-  title: { fontSize: 20, fontWeight: "bold", marginBottom: 10 },
-  paymentNote: {
-    color: "#0F3E48",
-    fontWeight: "bold",
-    marginBottom: 15,
-    fontSize: 16,
+  header: {
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: PRIMARY,
+    marginTop: 6,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#e0e0e0",
+    marginVertical: 16,
   },
   input: {
-    padding: 15,
-    backgroundColor: "#F3F3F3",
-    borderRadius: 10,
-    marginBottom: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 14,
+    backgroundColor: "#f1f3f4",
+    borderRadius: 14,
+    marginBottom: 14,
   },
-  inputText: { fontSize: 16 },
+  inputText: { fontSize: 15 },
   textArea: {
-    backgroundColor: "#F3F3F3",
-    padding: 15,
+    backgroundColor: "#f1f3f4",
+    padding: 14,
     minHeight: 90,
-    borderRadius: 10,
-    marginBottom: 15,
-    fontSize: 16,
+    borderRadius: 14,
+    marginBottom: 14,
+    fontSize: 15,
   },
-  error: { color: "red", fontWeight: "bold", marginBottom: 10 },
-  row: { flexDirection: "row", justifyContent: "space-between" },
+  feeReminder: {
+    flexDirection: "row",
+    gap: 10,
+    backgroundColor: "#e6f0ee",
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 14,
+  },
+  feeDesc: {
+    fontSize: 14,
+    color: "#3b4f4f",
+    lineHeight: 20,
+    flex: 1,
+  },
+  bold: {
+    fontWeight: "800",
+    color: PRIMARY,
+  },
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 12,
+  },
+  error: { color: "#c62828", fontWeight: "600" },
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 10,
+  },
   cancelBtn: {
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "#ddd",
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: "#e0e0e0",
     width: "48%",
     alignItems: "center",
   },
   continueBtn: {
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "#0F3E48",
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: PRIMARY,
     width: "48%",
     alignItems: "center",
   },
-  cancelText: { fontSize: 16 },
-  continueText: { fontSize: 16, color: "#fff", fontWeight: "bold" },
+  disabledBtn: {
+    backgroundColor: "#9ea7a7",
+  },
+  cancelText: { fontSize: 15 },
+  continueText: { fontSize: 15, color: "#fff", fontWeight: "800" },
 });
