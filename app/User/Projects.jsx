@@ -1,16 +1,16 @@
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   Image,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  Alert,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import useSubscriptionType from "../../services/useSubscriptionType";
 import BottomNavbar from "../components/BottomNav";
 
@@ -19,16 +19,18 @@ export default function Project() {
   const subType = useSubscriptionType();
   const [projects, setProjects] = useState([]);
 
+  /* ================= LOAD PROJECTS (NO UI SHIFT) ================= */
   const loadProjects = async () => {
     try {
       const keys = await AsyncStorage.getAllKeys();
       const projectKeys = keys.filter((k) =>
         k.startsWith("aestheticai:project-image:")
       );
+
       const items = await AsyncStorage.multiGet(projectKeys);
 
       const parsed = items.map(([key, value]) => {
-        const data = JSON.parse(value);
+        const data = JSON.parse(value || "{}");
         return {
           id: key,
           title: data.title || "Untitled Project",
@@ -60,11 +62,11 @@ export default function Project() {
     loadProjects();
   }, []);
 
+  /* ================= ACTIONS ================= */
   const openVisualization = (project) => {
     router.push(`/User/RoomVisualization?id=${project.id}`);
   };
 
-  // ✅ DELETE PROJECT (LONG PRESS)
   const handleDeleteProject = (projectId) => {
     Alert.alert(
       "Delete Project",
@@ -77,7 +79,7 @@ export default function Project() {
           onPress: async () => {
             try {
               await AsyncStorage.removeItem(projectId);
-              loadProjects(); // refresh list
+              loadProjects(); // refresh safely
             } catch (e) {
               console.log("Delete error:", e);
             }
@@ -89,15 +91,15 @@ export default function Project() {
 
   return (
     <View style={styles.container}>
-      {/* ===== HEADER ===== */}
-      <View style={styles.chatHeaderRow}>
-        <View style={styles.chatHeaderLeft}>
+      {/* ===== HEADER (FIXED HEIGHT – STABLE UI) ===== */}
+      <View style={styles.projectHeaderRow}>
+        <View style={styles.projectHeaderLeft}>
           <View style={styles.headerAvatar}>
             <Ionicons name="albums" size={20} color="#0F3E48" />
           </View>
           <View>
-            <Text style={styles.chatTitle}>Saved Projects</Text>
-            <Text style={styles.chatSubtitle}>
+            <Text style={styles.projectTitle}>Saved Projects</Text>
+            <Text style={styles.projectSubtitle}>
               {projects.length} project(s)
             </Text>
           </View>
@@ -107,7 +109,10 @@ export default function Project() {
       <View style={styles.headerDivider} />
 
       {/* ===== PROJECT LIST ===== */}
-      <ScrollView contentContainerStyle={styles.gallery}>
+      <ScrollView
+        contentContainerStyle={styles.gallery}
+        showsVerticalScrollIndicator={false}
+      >
         {projects.length > 0 ? (
           <View style={styles.grid}>
             {projects.map((project) => (
@@ -116,7 +121,7 @@ export default function Project() {
                 style={styles.card}
                 activeOpacity={0.9}
                 onPress={() => openVisualization(project)}
-                onLongPress={() => handleDeleteProject(project.id)} // ✅ LONG PRESS
+                onLongPress={() => handleDeleteProject(project.id)}
               >
                 <Image
                   source={
@@ -127,8 +132,11 @@ export default function Project() {
                   style={styles.image}
                   resizeMode="cover"
                 />
+
                 <View style={styles.overlay}>
-                  <Text style={styles.title}>{project.title}</Text>
+                  <Text style={styles.title} numberOfLines={1}>
+                    {project.title}
+                  </Text>
                   <Text style={styles.date}>{project.date}</Text>
                   <View style={styles.chip}>
                     <Text style={styles.chipText}>{project.tag}</Text>
@@ -160,17 +168,20 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F9FA",
   },
 
-  chatHeaderRow: {
+  /* ===== HEADER ===== */
+  projectHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingTop: 30,
     paddingBottom: 20,
     paddingHorizontal: 16,
   },
-  chatHeaderLeft: {
+
+  projectHeaderLeft: {
     flexDirection: "row",
     alignItems: "center",
   },
+
   headerAvatar: {
     width: 42,
     height: 42,
@@ -180,21 +191,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 10,
   },
-  chatTitle: {
+
+  projectTitle: {
     fontSize: 18,
     fontWeight: "800",
     color: "#0F3E48",
   },
-  chatSubtitle: {
+
+  projectSubtitle: {
     fontSize: 12,
     color: "#777",
   },
+
   headerDivider: {
     height: 1,
     backgroundColor: "#E4E6EB",
     marginBottom: 10,
   },
 
+  /* ===== GRID ===== */
   gallery: {
     paddingHorizontal: 20,
     paddingBottom: 120,
@@ -240,6 +255,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
+
   date: {
     color: "#E1F5FE",
     fontSize: 12,
@@ -254,26 +270,31 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 16,
   },
+
   chipText: {
     fontSize: 12,
     color: "#C44569",
     fontWeight: "600",
   },
 
+  /* ===== EMPTY STATE ===== */
   emptyWrap: {
     alignItems: "center",
     marginTop: 80,
   },
+
   emptyIconCircle: {
     backgroundColor: "#FDE2E4",
     borderRadius: 60,
     padding: 20,
     marginBottom: 14,
   },
+
   emptyIcon: {
     fontSize: 46,
     color: "#912f56",
   },
+
   emptyText: {
     textAlign: "center",
     color: "#912f56",

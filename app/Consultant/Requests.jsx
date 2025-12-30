@@ -1,4 +1,5 @@
 // screens/Consultant/Requests.jsx
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import {
@@ -10,6 +11,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -24,195 +26,183 @@ import { db } from "../../config/firebase";
 import { ensureChatRoom } from "../../services/chatService";
 import BottomNavbar from "../components/BottomNav";
 
+/* ================= STATUS TABS ================= */
+const TABS = ["pending", "accepted", "declined", "cancelled"];
+
+/* ================= STATUS NORMALIZER ================= */
+const normalizeStatus = (s) => {
+  if (!s) return "pending";
+  const v = s.toLowerCase();
+  if (v === "cancel" || v === "canceled") return "cancelled";
+  if (v === "decline") return "declined";
+  if (v === "complete" || v === "completed") return "completed";
+  return v;
+};
+
 export default function Requests() {
   const router = useRouter();
-  const [consultant, setConsultant] = useState(null);
+  const auth = getAuth();
+
+  const [authUid, setAuthUid] = useState(null);
   const [requests, setRequests] = useState([]);
+  const [activeTab, setActiveTab] = useState("pending");
   const [loading, setLoading] = useState(true);
 
-  // Load consultant profile
+  /* ================= AUTH LISTENER ================= */
   useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        const keys = await AsyncStorage.getAllKeys();
-        const profileKey = keys.find((k) =>
-          k.startsWith("aestheticai:user-profile:")
-        );
-        if (!profileKey) return;
-        const stored = await AsyncStorage.getItem(profileKey);
-        const parsed = JSON.parse(stored);
-        setConsultant(parsed);
-      } catch (err) {
-        console.log("❌ Error loading consultant profile:", err);
-      }
-    };
-    loadProfile();
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user) setAuthUid(user.uid);
+    });
+    return unsub;
   }, []);
 
-  // Fetch requests
+  /* ================= FETCH APPOINTMENTS ================= */
   const fetchRequests = async () => {
-    if (!consultant?.uid) return;
+    if (!authUid) return;
 
     try {
       setLoading(true);
+
       const q = query(
         collection(db, "appointments"),
-        where("consultantId", "==", consultant.uid)
+        where("consultantId", "==", authUid)
       );
+
       const snap = await getDocs(q);
       const results = [];
 
-      for (const docItem of snap.docs) {
-        const appointment = { id: docItem.id, ...docItem.data() };
+      for (const d of snap.docs) {
+        const data = d.data();
 
-        const userRef = doc(db, "users", appointment.userId);
-        const userSnap = await getDoc(userRef);
+        const item = {
+          id: d.id,
+          ...data,
+          status: normalizeStatus(data.status),
+        };
 
-        if (userSnap.exists()) {
-          const u = userSnap.data();
-          appointment.userName =
-            u.fullName ||
-            u.name ||
-            `${u.firstName || ""} ${u.lastName || ""}`.trim();
-          appointment.userEmail = u.email || "Unknown";
+        const uSnap = await getDoc(doc(db, "users", item.userId));
+        if (uSnap.exists()) {
+          const u = uSnap.data();
+          item.userName = u.name || u.fullName || "Unknown User";
+          item.userEmail = u.email;
         } else {
-          appointment.userName = "Unknown User";
-          appointment.userEmail = "N/A";
+          item.userName = "Unknown User";
+          item.userEmail = "N/A";
         }
 
-        results.push(appointment);
+        results.push(item);
       }
 
       setRequests(results);
     } catch (err) {
-      console.log("❌ Fetch request error:", err);
+      console.log("❌ Fetch requests error:", err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchRequests();
-  }, [consultant]);
+    if (authUid) fetchRequests();
+  }, [authUid]);
 
-  // ✅ ACCEPT = create chatroom ONCE (appointment-based)
+  /* ================= ACTIONS ================= */
   const acceptRequest = async (item) => {
-    try {
-      const roomId = `appointment_${item.id}`;
+    const roomId = `appointment_${item.id}`;
 
-      await updateDoc(doc(db, "appointments", item.id), {
-        status: "accepted",
-        chatRoomId: roomId,
-      });
+    await updateDoc(doc(db, "appointments", item.id), {
+      status: "accepted",
+      chatRoomId: roomId,
+    });
 
-      // Ensure chatroom exists (ONE per appointment)
-      await ensureChatRoom(
-        item.id,          // appointmentId
-        item.userId,
-        consultant.uid
-      );
-
-      setRequests((prev) =>
-        prev.map((r) =>
-          r.id === item.id
-            ? { ...r, status: "accepted", chatRoomId: roomId }
-            : r
-        )
-      );
-
-      Alert.alert("Success", "Appointment accepted!", [
-        { text: "OK", onPress: fetchRequests },
-      ]);
-    } catch (err) {
-      Alert.alert("Error", err.message);
-    }
+    await ensureChatRoom(item.id, item.userId, authUid);
+    fetchRequests();
   };
 
-  // Decline request
   const declineRequest = async (item) => {
-    try {
-      await updateDoc(doc(db, "appointments", item.id), {
-        status: "declined",
-      });
-      setRequests((prev) =>
-        prev.map((r) =>
-          r.id === item.id ? { ...r, status: "declined" } : r
-        )
+    await updateDoc(doc(db, "appointments", item.id), {
+      status: "declined",
+    });
+    fetchRequests();
+  };
+
+  /* ✅ SAFETY GUARD */
+  const openChat = (item) => {
+    if (item.status === "completed") {
+      Alert.alert(
+        "Consultation Completed",
+        "This chat is already completed and can no longer be opened."
       );
-    } catch (err) {
-      Alert.alert("Error", err.message);
+      return;
     }
+
+    router.push({
+      pathname: "/Consultant/ChatRoom",
+      params: {
+        roomId: item.chatRoomId,
+        userId: item.userId,
+        appointmentId: item.id,
+      },
+    });
   };
 
-  // ✅ OPEN CHAT = open existing chatroom ONLY
-  const openChat = async (item) => {
-    try {
-      const roomId = item.chatRoomId;
+  /* ================= FILTER ================= */
+  const filtered = requests.filter((r) =>
+    activeTab === "accepted"
+      ? r.status === "accepted" || r.status === "completed"
+      : r.status === activeTab
+  );
 
-      if (!roomId) {
-        Alert.alert(
-          "Chatroom not available",
-          "Make sure the appointment is accepted first."
-        );
-        return;
-      }
-
-      router.push({
-        pathname: "/Consultant/ChatRoom",
-        params: {
-          roomId,
-          userId: item.userId,
-          appointmentId: item.id,
-        },
-      });
-    } catch (err) {
-      Alert.alert("Error opening chat", err.message);
-    }
-  };
-
+  /* ================= RENDER ITEM ================= */
   const renderItem = ({ item }) => (
     <View style={styles.card}>
       <View style={styles.topRow}>
         <Text style={styles.clientName}>{item.userName}</Text>
-        <Text style={styles.status(item.status)}>{item.status}</Text>
+        <Text style={styles.status(item.status)}>
+          {item.status.toUpperCase()}
+        </Text>
       </View>
 
-      <View style={styles.detailsRow}>
-        <View style={styles.detailsBlock}>
-          <Text style={styles.detail}>{item.userEmail}</Text>
-          <Text style={styles.detail}>{item.date}</Text>
-          <Text style={styles.detail}>{item.time}</Text>
-          <Text style={styles.detail}>{item.notes}</Text>
-        </View>
+      <View style={styles.infoBlock}>
+        <Text style={styles.detail}>{item.userEmail}</Text>
 
-        <View style={styles.statusBlock}>
-          {item.status === "pending" && (
-            <View style={styles.actionRow}>
-              <TouchableOpacity
-                style={[styles.btn, styles.acceptBtn]}
-                onPress={() => acceptRequest(item)}
-              >
-                <Text style={styles.btnTextLight}>Accept</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.btn, styles.cancelBtn]}
-                onPress={() => declineRequest(item)}
-              >
-                <Text style={styles.btnTextDark}>Decline</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+        <View style={styles.dateRow}>
+          <Text style={styles.detail}>
+            {item.appointmentAt?.toDate?.().toLocaleDateString()}
+          </Text>
 
+          {/* ✅ ONLY ACCEPTED */}
           {item.status === "accepted" && (
             <TouchableOpacity
-              style={[styles.btn, styles.acceptBtn, { marginTop: 6 }]}
+              style={[styles.btn, styles.chatBtn]}
               onPress={() => openChat(item)}
             >
               <Text style={styles.btnTextLight}>Open Chat</Text>
             </TouchableOpacity>
           )}
         </View>
+
+        <Text style={styles.detail}>
+          {item.appointmentAt?.toDate?.().toLocaleTimeString()}
+        </Text>
       </View>
+
+      {item.status === "pending" && (
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.btn, styles.acceptBtn]}
+            onPress={() => acceptRequest(item)}
+          >
+            <Text style={styles.btnTextLight}>Accept</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.btn, styles.cancelBtn]}
+            onPress={() => declineRequest(item)}
+          >
+            <Text style={styles.btnTextDark}>Decline</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 
@@ -221,20 +211,34 @@ export default function Requests() {
       <View style={styles.headerWrap}>
         <Text style={styles.header}>Consultation Requests</Text>
         <Text style={styles.subHeader}>
-          Manage and review your latest appointments
+          Manage and review your appointments
         </Text>
       </View>
 
+      <View style={styles.tabRow}>
+        {TABS.map((t) => (
+          <TouchableOpacity key={t} onPress={() => setActiveTab(t)}>
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === t && styles.activeTabText,
+              ]}
+            >
+              {t.toUpperCase()}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {loading ? (
-        <ActivityIndicator size="large" color="#0F3E48" />
-      ) : requests.length === 0 ? (
-        <Text style={styles.empty}>No requests found.</Text>
+        <ActivityIndicator size="large" />
+      ) : filtered.length === 0 ? (
+        <Text style={styles.empty}>No {activeTab} appointments.</Text>
       ) : (
         <FlatList
-          data={requests}
-          keyExtractor={(item) => item.id}
+          data={filtered}
+          keyExtractor={(i) => i.id}
           renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 120 }}
         />
       )}
 
@@ -243,102 +247,76 @@ export default function Requests() {
   );
 }
 
-/* ------------------------------------------
- * STYLES (UNCHANGED)
- * ------------------------------------------ */
+/* ================= STYLES ================= */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F3F9FA" },
   headerWrap: {
     alignItems: "center",
     backgroundColor: "#01579B",
-    paddingVertical: 16,
-    elevation: 4,
-    width: "100%",
-    paddingTop: 60,
+    paddingTop: 50,
+    paddingBottom: 16,
   },
-  header: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: "#FFFFFF",
+  header: { fontSize: 22, fontWeight: "900", color: "#fff" },
+  subHeader: { fontSize: 14, color: "#E0F7FA" },
+
+  tabRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    backgroundColor: "#fff",
+    paddingVertical: 10,
   },
-  subHeader: {
-    fontSize: 14,
-    color: "#E0F7FA",
-    marginTop: 4,
-    fontStyle: "italic",
-  },
+
+  tabText: { fontWeight: "700", fontSize: 12, color: "#999" },
+  activeTabText: { color: "#01579B" },
+
   card: {
-    backgroundColor: "#FFFFFF",
-    paddingVertical: 20,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    marginTop: 20,
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 12,
+    marginTop: 16,
     marginHorizontal: 16,
     borderLeftWidth: 3,
     borderLeftColor: "#912f56",
   },
-  topRow: {
+
+  topRow: { flexDirection: "row", justifyContent: "space-between" },
+  clientName: { fontSize: 16, fontWeight: "700", color: "#01579B" },
+
+  infoBlock: { marginTop: 4 },
+  dateRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
   },
-  clientName: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#01579B",
-  },
-  detailsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  detailsBlock: { flex: 1 },
-  statusBlock: { alignItems: "flex-end" },
-  actionRow: { flexDirection: "row", gap: 8 },
-  btn: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-  },
-  acceptBtn: { backgroundColor: "#2c4f4f", marginTop: 40 },
-  cancelBtn: {
-    borderWidth: 1,
-    borderColor: "#912f56",
-    backgroundColor: "#fff",
-    marginTop: 40,
-  },
-  btnTextLight: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
-  },
-  btnTextDark: {
-    color: "#912f56",
-    fontWeight: "700",
-    fontSize: 12,
-  },
-  detail: {
-    fontSize: 13,
-    marginTop: 2,
-    color: "#455A64",
-  },
+
+  detail: { fontSize: 13, color: "#455A64" },
+
+  actionRow: { flexDirection: "row", gap: 8, marginTop: 12 },
+
+  btn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 },
+  acceptBtn: { backgroundColor: "#2c4f4f" },
+  chatBtn: { backgroundColor: "#3fa796" },
+  cancelBtn: { borderWidth: 1, borderColor: "#912f56" },
+
+  btnTextLight: { color: "#fff", fontWeight: "700", fontSize: 12 },
+  btnTextDark: { color: "#912f56", fontWeight: "700", fontSize: 12 },
+
   status: (s) => ({
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
-    paddingVertical: 2,
+    paddingVertical: 3,
     paddingHorizontal: 10,
     borderRadius: 6,
     backgroundColor:
-      s === "pending"
-        ? "#FFF3CD"
+      s === "completed"
+        ? "#E0E0E0"
         : s === "accepted"
         ? "#D1F2EB"
+        : s === "pending"
+        ? "#FFF3CD"
         : "#F8D7DA",
-    color:
-      s === "pending"
-        ? "#D99700"
-        : s === "accepted"
-        ? "#0F766E"
-        : "#B00020",
   }),
+
   empty: {
     textAlign: "center",
     marginTop: 20,

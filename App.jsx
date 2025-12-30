@@ -1,16 +1,16 @@
 // App.jsx
-import React, { useEffect } from "react";
-import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import React, { useEffect } from "react";
+import { AppState } from "react-native";
 import { db } from "./config/firebase";
 import "./polyfills";
 
 /* ================= AUTH ================= */
-import Login from "./app/Login";
 import ForgotPassword from "./app/ForgotPassword";
+import Login from "./app/Login";
 import Register from "./app/User/Register";
 
 /* ================= CONSULTANT REGISTER ================= */
@@ -19,27 +19,32 @@ import Step2Details from "./app/Consultant/Step2Details";
 import Step3Review from "./app/Consultant/Step3Review";
 
 /* ================= CONSULTANT APP ================= */
+import EarningsScreen from "./app/Consultant/EarningsScreen";
 import Homepage from "./app/Consultant/Homepage";
 import Requests from "./app/Consultant/Requests";
-import EarningsScreen from "./app/Consultant/EarningsScreen";
 
 /* ================= USER APP ================= */
-import Home from "./app/User/Home";
 import AIDesigner from "./app/User/AIDesigner";
+import ChangePassword from "./app/User/ChangePassword";
 import Consultants from "./app/User/Consultants";
-import Projects from "./app/User/Projects";
-import Profile from "./app/User/Profile";
 import Consultations from "./app/User/Consultations";
+import EditProfile from "./app/User/EditProfile";
+import Home from "./app/User/Home";
+import ManageSubscription from "./app/User/ManageSubscription";
+import Profile from "./app/User/Profile";
+import Projects from "./app/User/Projects";
+
+
 
 /* ================= PREMIUM ================= */
 import UpgradeInfo from "./app/User/UpgradeInfo";
 import UpgradePayment from "./app/User/UpgradePayment";
 
 /* ================= ADMIN ================= */
-import Dashboard from "./app/Admin/Dashboard";
 import ConsultantDetails from "./app/Admin/ConsultantDetails";
-import Subscription from "./app/Admin/Subscription";
+import Dashboard from "./app/Admin/Dashboard";
 import Ratings from "./app/Admin/Ratings";
+import Subscription from "./app/Admin/Subscription";
 import Withdrawals from "./app/Admin/Withdrawals";
 
 const Stack = createNativeStackNavigator();
@@ -151,6 +156,10 @@ export default function App() {
           name="Consultations"
           component={Consultations}
         />
+        <Stack.Screen name="EditProfile" component={EditProfile}/>
+        <Stack.Screen name="ChangePassword" component={ChangePassword}/>
+        <Stack.Screen name="ManageSubscription" component={ManageSubscription}/>
+         
 
         {/* PREMIUM */}
         <Stack.Screen

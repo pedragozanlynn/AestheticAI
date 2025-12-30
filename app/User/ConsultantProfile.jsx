@@ -30,6 +30,7 @@ export default function ConsultantProfile() {
 
   const [consultant, setConsultant] = useState(null);
   const [ratings, setRatings] = useState([]);
+  const [reviewerMap, setReviewerMap] = useState({}); // ✅ ADDED
   const [loading, setLoading] = useState(true);
   const [ratingsLoading, setRatingsLoading] = useState(true);
   const [scheduleVisible, setScheduleVisible] = useState(false);
@@ -51,7 +52,7 @@ export default function ConsultantProfile() {
     fetchConsultant();
   }, [consultantId]);
 
-  /* ================= FETCH RATINGS ================= */
+  /* ================= FETCH RATINGS (FIXED NAME SOURCE) ================= */
   useEffect(() => {
     if (!consultantId) return;
 
@@ -63,8 +64,24 @@ export default function ConsultantProfile() {
           where("consultantId", "==", consultantId),
           orderBy("createdAt", "desc")
         );
+
         const snap = await getDocs(q);
-        setRatings(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setRatings(list);
+
+        // 🔥 GET USER NAME FROM /users/{userId}
+        const map = {};
+        await Promise.all(
+          list.map(async (r) => {
+            if (r.userId && !map[r.userId]) {
+              const uSnap = await getDoc(doc(db, "users", r.userId));
+              if (uSnap.exists()) {
+                map[r.userId] = uSnap.data().name || "Anonymous";
+              }
+            }
+          })
+        );
+        setReviewerMap(map);
       } catch (e) {
         console.log("Ratings fetch error:", e);
       } finally {
@@ -107,7 +124,7 @@ export default function ConsultantProfile() {
     <ScrollView style={styles.page}>
       {/* BACK */}
       <TouchableOpacity style={styles.backBtn} onPress={router.back}>
-        <Ionicons name="arrow-back" size={26} color= "#ffff" />
+        <Ionicons name="arrow-back" size={26} color="#fff" />
       </TouchableOpacity>
 
       {/* HEADER */}
@@ -137,42 +154,13 @@ export default function ConsultantProfile() {
         {/* INFORMATION */}
         <View style={styles.card}>
           <Text style={styles.section}>Information</Text>
-
           <InfoRow icon="person" label="Full Name" value={consultant.fullName} />
           <InfoRow icon="mail" label="Email" value={consultant.email} />
           <InfoRow icon="home" label="Address" value={consultant.address} />
           <InfoRow icon="male-female" label="Gender" value={consultant.gender} />
-          <InfoRow
-            icon="briefcase"
-            label="Type"
-            value={consultant.consultantType}
-          />
-          <InfoRow
-            icon="construct"
-            label="Specialization"
-            value={consultant.specialization}
-          />
-          <InfoRow
-            icon="school"
-            label="Education"
-            value={consultant.education || "Not provided"}
-          />
-
-          {consultant.experience && (
-            <InfoRow
-              icon="time"
-              label="Experience"
-              value={`${consultant.experience} years`}
-            />
-          )}
-
-          {consultant.licenseNumber && (
-            <InfoRow
-              icon="card"
-              label="License Number"
-              value={consultant.licenseNumber}
-            />
-          )}
+          <InfoRow icon="briefcase" label="Type" value={consultant.consultantType} />
+          <InfoRow icon="construct" label="Specialization" value={consultant.specialization} />
+          <InfoRow icon="school" label="Education" value={consultant.education || "Not provided"} />
         </View>
 
         {/* AVAILABILITY */}
@@ -199,8 +187,9 @@ export default function ConsultantProfile() {
             ratings.map((r) => (
               <View key={r.id} style={styles.review}>
                 <Text style={styles.reviewName}>
-                  {r.reviewerName || "Anonymous"}
+                  {reviewerMap[r.userId] || "Anonymous"}
                 </Text>
+
                 <Text style={styles.reviewDate}>
                   {r.createdAt?.toDate?.().toDateString()}
                 </Text>
@@ -225,15 +214,8 @@ export default function ConsultantProfile() {
         </View>
 
         {/* ACTION */}
-        <TouchableOpacity
-          style={styles.cta}
-          onPress={() => setScheduleVisible(true)}
-        >
-          <Ionicons
-            name="calendar-outline"
-            size={18}
-            color="#fff"
-          />
+        <TouchableOpacity style={styles.cta} onPress={() => setScheduleVisible(true)}>
+          <Ionicons name="calendar-outline" size={18} color="#fff" />
           <Text style={styles.ctaText}>Request Consultation</Text>
         </TouchableOpacity>
       </View>
@@ -269,49 +251,43 @@ const InfoRow = ({ icon, label, value }) => (
 
 const styles = StyleSheet.create({
   page: { backgroundColor: "#fff" },
-
-  backBtn: {
-    position: "absolute",
-    top: 40,
-    left: 20,
-    zIndex: 10,
-  },
-
-  header: {
-    backgroundColor: "#C48AA0",
-    paddingTop: 70,
-    paddingBottom: 20,
-    alignItems: "center",
-  },
-  avatar: {
-    marginTop: -10,
-    width: 100,
-    height: 100,
-    borderRadius: 60,
-    borderWidth: 4,
-    borderColor: "#fff",
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#fff",
-    marginTop: 6,
-  },
-  headerSubtitle: {
-    color: "#f5f5f5",
-    marginBottom: 12,
-  },
-
+  backBtn: { position: "absolute", top: 40, left: 20, zIndex: 10 },
+  header: { backgroundColor: "#C48AA0", paddingTop: 70, paddingBottom: 20, alignItems: "center" },
+  avatar: { width: 100, height: 100, borderRadius: 60, borderWidth: 4, borderColor: "#fff" },
+  headerTitle: { fontSize: 22, fontWeight: "800", color: "#fff" },
+  headerSubtitle: { color: "#f5f5f5", marginBottom: 12 },
   headerStats: {
     flexDirection: "row",
     justifyContent: "space-around",
     width: "100%",
-    paddingHorizontal: 30,
+    paddingHorizontal: 20,
+    marginTop: 14,
   },
-  statBox: { alignItems: "center" },
-  statValue: { fontSize: 16, fontWeight: "700", color: "#fff" },
-  statLabel: { fontSize: 12, color: "#f5f5f5" },
-
+  
+  statBox: {
+    alignItems: "center",
+    justifyContent: "center",
+  
+    width: 90,              // ✅ same width lahat
+    paddingVertical: 10,
+  
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.7)",
+  },
+  
+  statValue: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#fff",
+  },
+  
+  statLabel: {
+    fontSize: 12,
+    color: "#f5f5f5",
+    marginTop: 2,
+  },
+  
   content: {
     paddingHorizontal: 32,
     paddingTop: 32,
@@ -322,46 +298,21 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
 
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#E1E8EA",
-  },
-  section: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#0F3E48",
-    marginBottom: 12,
-  },
+  card: { backgroundColor: "#fff", borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: "#E1E8EA" },
+  section: { fontSize: 16, fontWeight: "700", color: "#0F3E48", marginBottom: 12 },
   infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
   icon: { marginRight: 8 },
   label: { fontSize: 14, color: "#666", flex: 1 },
   value: { fontSize: 14, color: "#4A4A4A", flex: 1, textAlign: "right" },
 
   muted: { color: "#777", fontStyle: "italic" },
-
-  review: {
-    backgroundColor: "#F7F7F7",
-    padding: 10,
-    borderRadius: 12,
-    marginBottom: 10,
-  },
+  review: { backgroundColor: "#F7F7F7", padding: 10, borderRadius: 12, marginBottom: 10 },
   reviewName: { fontWeight: "700" },
   reviewDate: { fontSize: 11, color: "#777" },
   stars: { flexDirection: "row", marginVertical: 4 },
-  reviewText: { color: "#333", marginTop: 4 },
+  reviewText: { color: "#333" },
 
-  cta: {
-    backgroundColor: "#3fa796",
-    padding: 15,
-    borderRadius: 14,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 8,
-  },
+  cta: { backgroundColor: "#3fa796", padding: 15, borderRadius: 14, flexDirection: "row", justifyContent: "center", gap: 8 },
   ctaText: { color: "#fff", fontWeight: "700" },
 
   center: { flex: 1, justifyContent: "center", alignItems: "center" },

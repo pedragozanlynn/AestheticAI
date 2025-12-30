@@ -31,7 +31,14 @@ const toDateTime = (timeStr) => {
   if (modifier === "AM" && hours === 12) hours = 0;
 
   const d = new Date();
-  d.setHours(hours, minutes, 0, 0);
+  d.setHours(hours, minutes || 0, 0, 0);
+  return d;
+};
+
+/* ✅ CRITICAL FIX: COMBINE DATE + TIME */
+const combineDateAndTime = (date, time) => {
+  const d = new Date(date);
+  d.setHours(time.getHours(), time.getMinutes(), 0, 0);
   return d;
 };
 
@@ -110,20 +117,22 @@ export default function ScheduleModal({
     setErrorMsg(valid ? "" : "Choose a time within consultant availability.");
   }, [date, startTime, availability]);
 
-  /* ---------------- SUBMIT ---------------- */
+  /* ---------------- SUBMIT (FIXED) ---------------- */
 
   const handleContinue = () => {
     if (errorMsg) return;
 
-    const selectedDate = date.toISOString().split("T")[0];
-    const time = formatTime(startTime);
+    // ✅ EXACT DATE + TIME USER PICKED
+    const appointmentAt = combineDateAndTime(date, startTime);
 
     onClose();
 
     router.push(
-      `/User/BookConsultation?consultantId=${consultantId}&date=${selectedDate}&time=${time}&notes=${encodeURIComponent(
-        notes
-      )}&fee=${sessionFee}`
+      `/User/BookConsultation` +
+        `?consultantId=${consultantId}` +
+        `&appointmentAt=${appointmentAt.toISOString()}` +
+        `&notes=${encodeURIComponent(notes)}` +
+        `&fee=${sessionFee}`
     );
   };
 
@@ -192,7 +201,7 @@ export default function ScheduleModal({
             multiline
           />
 
-          {/* SESSION FEE MESSAGE (YOUR TEXT) */}
+          {/* SESSION INFO */}
           <View style={styles.feeReminder}>
             <Ionicons name="information-circle" size={20} color={PRIMARY} />
             <Text style={styles.feeDesc}>
@@ -201,8 +210,6 @@ export default function ScheduleModal({
               {"\n"}
               After payment, your consultation chat will be{" "}
               <Text style={styles.bold}>open for 12 hours only</Text>.
-              {"\n"}
-              Please complete your discussion within this time.
             </Text>
           </View>
 
@@ -250,21 +257,10 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
   },
-  header: {
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: PRIMARY,
-    marginTop: 6,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "#e0e0e0",
-    marginVertical: 16,
-  },
+  header: { alignItems: "center", marginBottom: 8 },
+  title: { fontSize: 20, fontWeight: "800", color: PRIMARY },
+  divider: { height: 1, backgroundColor: "#e0e0e0", marginVertical: 16 },
+
   input: {
     flexDirection: "row",
     alignItems: "center",
@@ -275,6 +271,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   inputText: { fontSize: 15 },
+
   textArea: {
     backgroundColor: "#f1f3f4",
     padding: 14,
@@ -283,6 +280,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     fontSize: 15,
   },
+
   feeReminder: {
     flexDirection: "row",
     gap: 10,
@@ -291,28 +289,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 14,
   },
-  feeDesc: {
-    fontSize: 14,
-    color: "#3b4f4f",
-    lineHeight: 20,
-    flex: 1,
-  },
-  bold: {
-    fontWeight: "800",
-    color: PRIMARY,
-  },
-  errorBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 12,
-  },
+  feeDesc: { fontSize: 14, color: "#3b4f4f", lineHeight: 20, flex: 1 },
+  bold: { fontWeight: "800", color: PRIMARY },
+
+  errorBox: { flexDirection: "row", alignItems: "center", gap: 6 },
   error: { color: "#c62828", fontWeight: "600" },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 10,
-  },
+
+  row: { flexDirection: "row", justifyContent: "space-between", marginTop: 10 },
   cancelBtn: {
     padding: 14,
     borderRadius: 14,
@@ -327,9 +310,8 @@ const styles = StyleSheet.create({
     width: "48%",
     alignItems: "center",
   },
-  disabledBtn: {
-    backgroundColor: "#9ea7a7",
-  },
+  disabledBtn: { backgroundColor: "#9ea7a7" },
+
   cancelText: { fontSize: 15 },
   continueText: { fontSize: 15, color: "#fff", fontWeight: "800" },
 });

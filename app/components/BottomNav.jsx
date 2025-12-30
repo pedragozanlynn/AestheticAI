@@ -51,7 +51,6 @@ export default function BottomNavbar({
     { name: "Withdrawals", icon: "cash", routePath: "/Admin/Withdrawals" },
     { name: "Consultants", icon: "briefcase", routePath: "/Admin/Consultants" },
     { name: "Subscription", icon: "wallet", routePath: "/Admin/Subscription" },
-    { name: "Ratings", icon: "star", routePath: "/Admin/Ratings" },
   ];
 
   // Select correct tabs
@@ -144,7 +143,7 @@ export default function BottomNavbar({
 const styles = StyleSheet.create({
   wrapper: {
     position: "absolute",
-    bottom: 15,
+    bottom: 5,
     width: width,
     alignItems: "center",
   },

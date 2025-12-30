@@ -41,16 +41,22 @@ export default function ChatList() {
     }
   };
 
+  // ✅ FIXED — uses appointmentAt
   const fetchAppointmentInfo = async (appointmentId) => {
     try {
       const snap = await getDoc(doc(db, "appointments", appointmentId));
       if (!snap.exists()) return null;
+
       const a = snap.data();
+
+      if (!a.appointmentAt) return null;
+
       return {
-        date: a.date || null,
-        time: a.time || null,
+        date: a.appointmentAt,
+        time: a.appointmentAt,
       };
-    } catch {
+    } catch (e) {
+      console.log("Fetch appointment error:", e);
       return null;
     }
   };
@@ -82,8 +88,8 @@ export default function ChatList() {
         consultantId: room.consultantId,
         consultantName: room.consultantName,
         appointmentId: room.appointmentId,
-        appointmentDate: appointment?.date || "TBA",
-        appointmentTime: appointment?.time || "TBA",
+        appointmentDate: appointment?.date || null,
+        appointmentTime: appointment?.time || null,
       });
 
       setPaymentModalVisible(true);
@@ -135,7 +141,6 @@ export default function ChatList() {
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Messages</Text>
@@ -171,12 +176,6 @@ export default function ChatList() {
                 {item.lastMessage || "No messages yet"}
               </Text>
             </View>
-
-            {item.unreadForUser && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadText}>NEW</Text>
-              </View>
-            )}
           </TouchableOpacity>
         )}
         ListEmptyComponent={
@@ -188,8 +187,12 @@ export default function ChatList() {
         <PaymentModal
           visible={paymentModalVisible}
           onClose={() => setPaymentModalVisible(false)}
-          {...currentPaymentData}
-          onPaymentSuccess={() => setPaymentModalVisible(false)}
+          userId={currentPaymentData.userId}
+          consultantId={currentPaymentData.consultantId}
+          consultantName={currentPaymentData.consultantName}
+          appointmentId={currentPaymentData.appointmentId}
+          appointmentDate={currentPaymentData.appointmentDate}
+          appointmentTime={currentPaymentData.appointmentTime}
         />
       )}
     </View>
@@ -200,7 +203,6 @@ export default function ChatList() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F3F9FA" },
-
   header: {
     backgroundColor: "#01579B",
     paddingTop: 30,
@@ -212,13 +214,11 @@ const styles = StyleSheet.create({
   },
   headerTitle: { color: "#fff", fontSize: 22, fontWeight: "800" },
   headerSub: { color: "#E1F5FE", marginTop: 2 },
-
   iconBtn: {
     padding: 8,
     borderRadius: 20,
     backgroundColor: "rgba(255,255,255,0.15)",
   },
-
   chatItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -229,7 +229,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     elevation: 2,
   },
-
   avatar: {
     width: 48,
     height: 48,
@@ -240,18 +239,8 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   avatarText: { color: "#fff", fontWeight: "800", fontSize: 18 },
-
   name: { fontSize: 15, fontWeight: "700", color: "#0F3E48" },
   message: { fontSize: 13, color: "#607D8B", marginTop: 2 },
-
-  unreadBadge: {
-    backgroundColor: "#0288D1",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-  },
-  unreadText: { color: "#FFF", fontSize: 11, fontWeight: "700" },
-
   empty: {
     textAlign: "center",
     marginTop: 40,

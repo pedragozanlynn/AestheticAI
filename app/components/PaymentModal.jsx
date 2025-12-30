@@ -1,5 +1,5 @@
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import React, { useState } from "react";
+import { addDoc, collection, doc, getDoc, serverTimestamp } from "firebase/firestore";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -10,48 +10,25 @@ import {
 } from "react-native";
 import { db } from "../../config/firebase";
 
-const SESSION_FEE = 999;
-
 /* ================= HELPERS ================= */
 
-const formatDate = (value) => {
-  if (!value) return "TBA";
-
-  // Firestore Timestamp
-  if (typeof value?.toDate === "function") {
-    return value.toDate().toLocaleDateString();
+const formatDate = (ts) => {
+  if (!ts) return "TBA";
+  if (typeof ts?.toDate === "function") {
+    return ts.toDate().toLocaleDateString();
   }
-
-  // JS Date
-  if (value instanceof Date) {
-    return value.toLocaleDateString();
-  }
-
-  // String
-  return String(value);
+  return "TBA";
 };
 
-const formatTime = (value) => {
-  if (!value) return "TBA";
-
-  // Firestore Timestamp
-  if (typeof value?.toDate === "function") {
-    return value.toDate().toLocaleTimeString([], {
+const formatTime = (ts) => {
+  if (!ts) return "TBA";
+  if (typeof ts?.toDate === "function") {
+    return ts.toDate().toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
   }
-
-  // JS Date
-  if (value instanceof Date) {
-    return value.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-
-  // String
-  return String(value);
+  return "TBA";
 };
 
 export default function PaymentModal({
@@ -61,17 +38,43 @@ export default function PaymentModal({
   consultantId,
   consultantName,
   appointmentId,
-  appointmentDate,
-  appointmentTime,
   onPaymentSuccess,
 }) {
   const [loading, setLoading] = useState(false);
+  const [sessionFee, setSessionFee] = useState(0);
+  const [appointmentAt, setAppointmentAt] = useState(null);
+  const [fetching, setFetching] = useState(true);
 
-  const safeDate = formatDate(appointmentDate);
-  const safeTime = formatTime(appointmentTime);
+  /* ================= AUTO LOAD APPOINTMENT ================= */
+  useEffect(() => {
+    if (!visible || !appointmentId) return;
 
+    const loadAppointment = async () => {
+      try {
+        const snap = await getDoc(doc(db, "appointments", appointmentId));
+        if (!snap.exists()) return;
+
+        const data = snap.data();
+
+        setSessionFee(Number(data.sessionFee || 0));
+        setAppointmentAt(data.appointmentAt || null);
+      } catch (e) {
+        console.log("Load appointment error:", e);
+      } finally {
+        setFetching(false);
+      }
+    };
+
+    setFetching(true);
+    loadAppointment();
+  }, [visible, appointmentId]);
+
+  const safeDate = formatDate(appointmentAt);
+  const safeTime = formatTime(appointmentAt);
+
+  /* ================= PAYMENT ================= */
   const handlePayment = async () => {
-    if (!userId || !consultantId || !appointmentId) {
+    if (!userId || !consultantId || !appointmentId || !sessionFee) {
       alert("Missing payment information.");
       return;
     }
@@ -79,36 +82,36 @@ export default function PaymentModal({
     setLoading(true);
 
     try {
-      const consultantShare = SESSION_FEE * 0.7;
-      const adminShare = SESSION_FEE * 0.3;
+      const consultantShare = Number((sessionFee * 0.7).toFixed(2));
+      const adminShare = Number((sessionFee * 0.3).toFixed(2));
 
+      // ✅ CONSULTANT EARNING
       await addDoc(collection(db, "payments"), {
         userId,
         consultantId,
         consultantName: consultantName || "Consultant",
         appointmentId,
-        appointmentDate: safeDate,
-        appointmentTime: safeTime,
+        appointmentAt,
         amount: consultantShare,
+        baseAmount: sessionFee,
         currency: "PHP",
         status: "completed",
         createdAt: serverTimestamp(),
-        method: "manual",
         type: "consultant_earning",
       });
 
+      // ✅ ADMIN INCOME
       await addDoc(collection(db, "subscription_payments"), {
         adminId: "ADMIN_UID",
         userId,
         consultantId,
         appointmentId,
-        appointmentDate: safeDate,
-        appointmentTime: safeTime,
+        appointmentAt,
         amount: adminShare,
+        baseAmount: sessionFee,
         currency: "PHP",
         status: "completed",
         createdAt: serverTimestamp(),
-        method: "manual",
         type: "admin_income",
       });
 
@@ -130,41 +133,47 @@ export default function PaymentModal({
 
           <View style={styles.divider} />
 
-          <View style={styles.infoRow}>
-            <Text style={styles.label}>Consultant</Text>
-            <Text style={styles.value}>{consultantName}</Text>
-          </View>
+          {fetching ? (
+            <ActivityIndicator size="large" color="#2c4f4f" />
+          ) : (
+            <>
+              <View style={styles.infoRow}>
+                <Text style={styles.label}>Consultant</Text>
+                <Text style={styles.value}>{consultantName}</Text>
+              </View>
 
-          <View style={styles.infoRow}>
-            <Text style={styles.label}>Date</Text>
-            <Text style={styles.value}>{safeDate}</Text>
-          </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.label}>Date</Text>
+                <Text style={styles.value}>{safeDate}</Text>
+              </View>
 
-          <View style={styles.infoRow}>
-            <Text style={styles.label}>Start Time</Text>
-            <Text style={styles.value}>{safeTime}</Text>
-          </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.label}>Start Time</Text>
+                <Text style={styles.value}>{safeTime}</Text>
+              </View>
 
-          <View style={styles.feeBox}>
-            <Text style={styles.feeLabel}>Session Fee</Text>
-            <Text style={styles.feeValue}>₱{SESSION_FEE}</Text>
-          </View>
+              <View style={styles.feeBox}>
+                <Text style={styles.feeLabel}>Session Fee</Text>
+                <Text style={styles.feeValue}>₱{sessionFee}</Text>
+              </View>
 
-          <TouchableOpacity
-            style={[styles.payBtn, loading && { opacity: 0.7 }]}
-            onPress={handlePayment}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.payText}>Pay & Start Chat</Text>
-            )}
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.payBtn, loading && { opacity: 0.7 }]}
+                onPress={handlePayment}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.payText}>Pay & Start Chat</Text>
+                )}
+              </TouchableOpacity>
 
-          <TouchableOpacity onPress={onClose}>
-            <Text style={styles.cancelText}>Cancel</Text>
-          </TouchableOpacity>
+              <TouchableOpacity onPress={onClose}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
     </Modal>

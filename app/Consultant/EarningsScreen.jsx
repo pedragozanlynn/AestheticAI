@@ -22,7 +22,7 @@ import {
   View,
 } from "react-native";
 import { db } from "../../config/firebase";
-import BottomNavbar from "../components/BottomNav";   // ✅ import navbar
+import BottomNavbar from "../components/BottomNav";
 
 export default function EarningsScreen() {
   const [entries, setEntries] = useState([]);
@@ -30,9 +30,12 @@ export default function EarningsScreen() {
   const [withdrawVisible, setWithdrawVisible] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [gcashNumber, setGcashNumber] = useState("");
+  const [activeTab, setActiveTab] = useState("all"); // ✅ TAB STATE
 
   const auth = getAuth();
   const consultantUid = auth.currentUser.uid;
+
+  /* ================= LOAD EARNINGS ================= */
 
   useEffect(() => {
     const ref = collection(db, "payments");
@@ -43,58 +46,31 @@ export default function EarningsScreen() {
     );
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-      let items = await Promise.all(
+      const items = await Promise.all(
         snapshot.docs.map(async (docSnap) => {
           const data = docSnap.data();
           let userName = "System";
 
           if (data.userId && data.type === "consultant_earning") {
             try {
-              const userRef = doc(db, "users", data.userId);
-              const userDoc = await getDoc(userRef);
+              const userDoc = await getDoc(doc(db, "users", data.userId));
               if (userDoc.exists()) {
                 userName =
                   userDoc.data().name ||
                   userDoc.data().fullName ||
                   "User";
               }
-            } catch (err) {
-              console.log("Error fetching user name:", err);
-            }
-          }
-
-          const rawAmount = Number(data.amount) || 0;
-          let consultantAmount = rawAmount;
-
-          if (data.type === "consultant_earning") {
-            consultantAmount = rawAmount * 0.7;
+            } catch {}
           }
 
           return {
             id: docSnap.id,
             ...data,
             userName,
-            consultantAmount,
+            consultantAmount: Number(data.amount) || 0,
           };
         })
       );
-
-      if (items.length === 0) {
-        items = [
-          {
-            id: "dummy1",
-            type: "consultant_earning",
-            consultantAmount: 700,
-            createdAt: { toDate: () => new Date() },
-          },
-          {
-            id: "dummy2",
-            type: "withdraw",
-            consultantAmount: -300,
-            createdAt: { toDate: () => new Date() },
-          },
-        ];
-      }
 
       setEntries(items);
       setLoading(false);
@@ -103,24 +79,24 @@ export default function EarningsScreen() {
     return unsubscribe;
   }, [consultantUid]);
 
-  const total = entries.reduce((sum, e) => sum + e.consultantAmount, 0);
+  /* ================= BALANCE ================= */
 
-  const recordEarning = async (userId, amount) => {
-    try {
-      await addDoc(collection(db, "payments"), {
-        consultantId: consultantUid,
-        userId: userId,
-        type: "consultant_earning",
-        amount: amount,
-        createdAt: serverTimestamp(),
-        status: "completed",
-      });
-      Alert.alert("Success", "Earning recorded successfully.");
-    } catch (err) {
-      console.log(err);
-      Alert.alert("Error", "Failed to record earning.");
-    }
-  };
+  const total = entries.reduce(
+    (sum, e) => sum + (Number(e.consultantAmount) || 0),
+    0
+  );
+
+  /* ================= FILTER ================= */
+
+  const filteredEntries = entries.filter((item) => {
+    if (activeTab === "all") return true;
+    if (activeTab === "earned") return item.type === "consultant_earning";
+    if (activeTab === "withdraw") return item.type === "withdraw";
+    if (activeTab === "reversal") return item.type === "withdraw_reversal";
+    return true;
+  });
+
+  /* ================= WITHDRAW ================= */
 
   const submitWithdraw = async () => {
     if (!withdrawAmount.trim() || !gcashNumber.trim()) {
@@ -129,7 +105,7 @@ export default function EarningsScreen() {
     }
 
     const amountNum = parseFloat(withdrawAmount);
-    if (amountNum > total) {
+    if (amountNum <= 0 || amountNum > total) {
       Alert.alert("Invalid Amount", "Withdrawal exceeds balance.");
       return;
     }
@@ -152,24 +128,30 @@ export default function EarningsScreen() {
         status: "pending",
       });
 
-      Alert.alert("Success", "Withdrawal request submitted and awaiting admin approval.");
+      Alert.alert(
+        "Success",
+        "Withdrawal request submitted and awaiting admin approval."
+      );
+
       setWithdrawVisible(false);
       setWithdrawAmount("");
       setGcashNumber("");
     } catch (err) {
-      console.log(err);
       Alert.alert("Error", "Failed to submit withdrawal.");
     }
   };
 
+  /* ================= UI ================= */
+
   return (
     <View style={styles.container}>
-      {/* Balance Card with Withdraw button inside */}
+      {/* BALANCE */}
       <View style={styles.balanceCard}>
         <View>
           <Text style={styles.balanceLabel}>Your Balance</Text>
           <Text style={styles.balanceAmount}>₱ {total.toFixed(2)}</Text>
         </View>
+
         <TouchableOpacity
           style={styles.balanceWithdrawBtn}
           onPress={() => setWithdrawVisible(true)}
@@ -177,12 +159,38 @@ export default function EarningsScreen() {
           <Text style={styles.balanceWithdrawText}>Withdraw</Text>
         </TouchableOpacity>
       </View>
+      <Text style={styles.historyTitle}>Transaction History</Text>
 
+      {/* TABS */}
+      <View style={styles.tabsRow}>
+        {["all", "earned", "withdraw", "reversal"].map((tab) => (
+          <TouchableOpacity
+            key={tab}
+            style={[
+              styles.tabBtn,
+              activeTab === tab && styles.tabActive,
+            ]}
+            onPress={() => setActiveTab(tab)}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === tab && styles.tabTextActive,
+              ]}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+
+      {/* LIST */}
       {loading ? (
         <Text>Loading...</Text>
       ) : (
         <FlatList
-          data={entries}
+          data={filteredEntries}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <View style={styles.card}>
@@ -191,11 +199,13 @@ export default function EarningsScreen() {
                   Earned ₱ {item.consultantAmount.toFixed(2)}
                 </Text>
               )}
+
               {item.type === "withdraw" && (
                 <Text style={[styles.amount, { color: "red" }]}>
                   Withdraw ₱ {Math.abs(item.consultantAmount).toFixed(2)}
                 </Text>
               )}
+
               {item.type === "withdraw_reversal" && (
                 <Text style={[styles.amount, { color: "orange" }]}>
                   Reversal ₱ {item.consultantAmount.toFixed(2)}
@@ -210,7 +220,7 @@ export default function EarningsScreen() {
         />
       )}
 
-      {/* MODAL */}
+      {/* WITHDRAW MODAL */}
       <Modal visible={withdrawVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
           <View style={styles.modalBox}>
@@ -222,24 +232,15 @@ export default function EarningsScreen() {
               keyboardType="numeric"
               value={withdrawAmount}
               onChangeText={setWithdrawAmount}
-              placeholder="Enter amount"
             />
 
-            {/* GCash Card styled same as Balance */}
-            <View style={styles.gcashCard}>
-              <View style={styles.gcashRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.gcashLabel}>GCash Number</Text>
-                  <TextInput
-                    style={styles.gcashInput}
-                    keyboardType="phone-pad"
-                    value={gcashNumber}
-                    onChangeText={setGcashNumber}
-                    placeholder="Enter number"
-                  />
-                </View>
-              </View>
-            </View>
+            <Text style={styles.inputLabel}>GCash Number</Text>
+            <TextInput
+              style={styles.input}
+              keyboardType="phone-pad"
+              value={gcashNumber}
+              onChangeText={setGcashNumber}
+            />
 
             <TouchableOpacity
               style={styles.submitBtn}
@@ -258,16 +259,13 @@ export default function EarningsScreen() {
         </View>
       </Modal>
 
-      {/* ✅ Bottom navigation bar */}
       <BottomNavbar role="consultant" />
     </View>
   );
 }
 
+/* ================= STYLES ================= */
 
-// ------------------------------------------------------------
-// STYLES
-// ------------------------------------------------------------
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, backgroundColor: "#F3F9FA" },
 
@@ -277,49 +275,65 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 22,
     borderRadius: 20,
-    backgroundColor: "#01579B", // ocean blue
-    marginBottom: 26,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    backgroundColor: "#01579B",
+    marginBottom: 16,
   },
-  balanceLabel: { fontSize: 15, fontWeight: "600", color: "#BBDEFB" },
-  balanceAmount: {
-    fontSize: 28,
-    fontWeight: "900",
-    color: "#FFFFFF",
-    marginTop: 6,
-    letterSpacing: 0.5,
-  },
+  balanceLabel: { fontSize: 15, color: "#BBDEFB" },
+  balanceAmount: { fontSize: 28, fontWeight: "900", color: "#fff" },
+
   balanceWithdrawBtn: {
     backgroundColor: "#3fa796",
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 12,
   },
-  balanceWithdrawText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-    textAlign: "center",
-  },
+  balanceWithdrawText: { color: "#fff", fontWeight: "700" },
 
+  tabsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    marginHorizontal: 4,
+    borderRadius: 20,
+    backgroundColor: "#E0E0E0",
+    alignItems: "center",
+  },
+  tabActive: {
+    backgroundColor: "#8f2f52",
+  },
+  tabText: { fontSize: 12, fontWeight: "700", color: "#555" },
+  tabTextActive: { color: "#fff" },
+
+  historyTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 10,
+    color: "#0F3E48",
+  },
   card: {
     padding: 18,
-    borderRadius: 14,
+    borderRadius: 16,
     marginBottom: 14,
     backgroundColor: "#fff",
+  
+    // ✨ visual upgrade
     shadowColor: "#000",
     shadowOpacity: 0.08,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  
+    // ✨ subtle left accent (transaction feel)
+    borderLeftWidth: 4,
+    borderLeftColor: "#8f2f52",
   },
+  
   amount: { fontSize: 18, fontWeight: "700" },
   date: { marginTop: 6, color: "#555", fontSize: 13 },
-  small: { fontSize: 12, marginTop: 2, color: "#777" },
 
   modalContainer: {
     flex: 1,
@@ -331,116 +345,32 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     padding: 30,
     borderRadius: 18,
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 5,
   },
   modalTitle: {
     fontSize: 22,
     fontWeight: "800",
     marginBottom: 20,
-    color: "#0F3E48",
     textAlign: "center",
-    letterSpacing: 0.5,
   },
-
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0F3E48",
-    marginBottom: 6,
-    marginTop: 12,
-  },
+  inputLabel: { fontWeight: "600", marginBottom: 6 },
   input: {
     borderWidth: 1,
     borderColor: "#ccc",
     padding: 12,
     borderRadius: 12,
-    fontSize: 16,
     marginBottom: 14,
-    backgroundColor: "#F9FAFB",
   },
-
-  gcashCard: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 22,
-    borderRadius: 20,
-    backgroundColor: "#01579B", // ocean blue, same as balance card
-    marginBottom: 26,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  gcashRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  gcashLabel: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#BBDEFB",
-    marginBottom: 8,
-    letterSpacing: 0.4,
-  },
-  gcashInput: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 12,
-    borderRadius: 12,
-    fontSize: 16,
-    backgroundColor: "#F9FAFB",
-    color: "#0F3E48",
-  },
-  gcashWithdrawBtn: {
-    backgroundColor: "#3fa796",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginLeft: 12,
-  },
-  gcashWithdrawText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 13,
-    textAlign: "center",
-  },
-
   submitBtn: {
     backgroundColor: "#0277BD",
     padding: 15,
     borderRadius: 12,
-    marginTop: 10,
-    shadowColor: "#0277BD",
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
   },
   submitText: {
-    color: "#FFF",
+    color: "#fff",
     textAlign: "center",
     fontWeight: "700",
     fontSize: 17,
-    letterSpacing: 0.5,
   },
-
-  cancelBtn: { 
-    marginTop: 14, 
-    padding: 12, 
-    borderRadius: 12,
-    backgroundColor: "#ECEFF1",
-  },
-  cancelText: {
-    textAlign: "center",
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#37474F",
-  },
+  cancelBtn: { marginTop: 14, padding: 12 },
+  cancelText: { textAlign: "center", fontWeight: "600" },
 });

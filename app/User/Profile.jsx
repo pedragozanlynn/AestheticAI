@@ -26,7 +26,7 @@ export default function Profile() {
   const [gender, setGender] = useState("male");
   const [logoutVisible, setLogoutVisible] = useState(false);
 
-  /* ================= LOAD USER FROM USERS COLLECTION ================= */
+  /* ================= LOAD USER ================= */
   useEffect(() => {
     const loadUserFromDB = async () => {
       try {
@@ -39,8 +39,6 @@ export default function Profile() {
         if (!snap.exists()) return;
 
         const data = snap.data();
-
-        // ✅ FIX HERE (name field)
         setUserName(data?.name || "Guest");
         setGender(data?.gender?.toLowerCase() || "male");
       } catch (err) {
@@ -86,18 +84,27 @@ export default function Profile() {
       <View style={styles.headerWrap}>
         <View style={styles.profileRow}>
           <Image source={avatarSource} style={styles.avatarImage} />
+
           <View style={styles.profileInfo}>
-            <Text style={styles.header}>{userName}</Text>
+            <Text style={styles.header} numberOfLines={1}>
+              {userName}
+            </Text>
+
             <Text style={styles.subscription}>
               {subType ? `Subscribed: ${subType}` : "Free Plan"}
             </Text>
           </View>
         </View>
+
         <View style={styles.divider} />
       </View>
 
+      {/* ================= CONTENT ================= */}
       <ScrollView contentContainerStyle={styles.container}>
-        <TouchableOpacity style={styles.card}>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => router.push("/User/EditProfile")}
+        >
           <Ionicons name="create-outline" size={30} color="#1E90FF" />
           <View style={styles.cardContent}>
             <Text style={styles.cardTitle}>Edit Profile</Text>
@@ -108,7 +115,10 @@ export default function Profile() {
           <Ionicons name="chevron-forward" size={22} color="#999" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.card}>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => router.push("/User/ChangePassword")}
+        >
           <Ionicons name="lock-closed-outline" size={30} color="#C44569" />
           <View style={styles.cardContent}>
             <Text style={styles.cardTitle}>Change Password</Text>
@@ -117,7 +127,10 @@ export default function Profile() {
           <Ionicons name="chevron-forward" size={22} color="#999" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.card}>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => router.push("/User/ManageSubscription")}
+        >
           <Ionicons name="card-outline" size={30} color="#2C3E50" />
           <View style={styles.cardContent}>
             <Text style={styles.cardTitle}>Manage Subscription</Text>
@@ -175,6 +188,7 @@ export default function Profile() {
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: "#F9FAFB" },
+
   headerWrap: {
     paddingTop: 50,
     paddingBottom: 24,
@@ -182,8 +196,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#01579B",
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
+    minHeight: 170, // ✅ UI NEVER MOVES
   },
+
   profileRow: { flexDirection: "row", alignItems: "center" },
+
   avatarImage: {
     width: 60,
     height: 60,
@@ -192,14 +209,22 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#faf9f6",
   },
-  profileInfo: { flexDirection: "column" },
-  header: { fontSize: 22, fontWeight: "800", color: "#faf9f6" },
+
+  profileInfo: { flexDirection: "column", flex: 1 },
+
+  header: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#faf9f6",
+  },
+
   subscription: {
     fontSize: 14,
     color: "#faf9f6",
     marginTop: 2,
     fontStyle: "italic",
   },
+
   divider: {
     width: "100%",
     height: 4,
@@ -207,7 +232,9 @@ const styles = StyleSheet.create({
     marginTop: 18,
     backgroundColor: "#faf9f6",
   },
+
   container: { padding: 20 },
+
   card: {
     flexDirection: "row",
     alignItems: "center",
@@ -218,35 +245,52 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#f1f1f1",
   },
+
   cardContent: { flex: 1, marginLeft: 14 },
-  cardTitle: { fontSize: 17, fontWeight: "700", color: "#2C3E50" },
+
+  cardTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#2C3E50",
+  },
+
   cardSubtitle: {
     fontSize: 13,
     color: "#7F8C8D",
     marginTop: 2,
   },
+
+  /* ===== MODAL ===== */
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "center",
     alignItems: "center",
   },
+
   modalBox: {
     width: "80%",
     backgroundColor: "#fff",
     borderRadius: 20,
     padding: 20,
   },
+
   modalTitle: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
+
   modalText: { fontSize: 14, color: "#555", marginBottom: 20 },
+
   modalActions: { flexDirection: "row", justifyContent: "flex-end" },
+
   cancelBtn: { paddingVertical: 8, paddingHorizontal: 16, marginRight: 10 },
+
   cancelText: { color: "#555", fontWeight: "600" },
+
   confirmBtn: {
     backgroundColor: "#C44569",
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 10,
   },
+
   confirmText: { color: "#fff", fontWeight: "700" },
 });
