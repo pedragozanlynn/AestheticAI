@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   View,
   Modal,
+  StatusBar,
+  Platform,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
@@ -26,13 +28,10 @@ export default function Profile() {
   const [gender, setGender] = useState("male");
   const [logoutVisible, setLogoutVisible] = useState(false);
 
-  /* ================= LOAD USER ================= */
   useEffect(() => {
     const loadUserFromDB = async () => {
       try {
-        const uid = await AsyncStorage.getItem(
-          "aestheticai:current-user-id"
-        );
+        const uid = await AsyncStorage.getItem("aestheticai:current-user-id");
         if (!uid) return;
 
         const snap = await getDoc(doc(db, "users", uid));
@@ -45,7 +44,6 @@ export default function Profile() {
         console.log("Error loading user from DB:", err);
       }
     };
-
     loadUserFromDB();
   }, []);
 
@@ -54,23 +52,17 @@ export default function Profile() {
       ? require("../../assets/office-woman.png")
       : require("../../assets/office-man.png");
 
-  /* ================= LOGOUT ================= */
   const handleLogoutConfirmed = async () => {
     try {
-      const uid = await AsyncStorage.getItem(
-        "aestheticai:current-user-id"
-      );
-
+      const uid = await AsyncStorage.getItem("aestheticai:current-user-id");
       if (uid) {
         await updateDoc(doc(db, "users", uid), {
           isOnline: false,
           lastSeen: serverTimestamp(),
         });
       }
-
       await AsyncStorage.removeItem("aestheticai:current-user-id");
       await AsyncStorage.clear();
-
       setLogoutVisible(false);
       router.replace("/Login");
     } catch (err) {
@@ -80,75 +72,74 @@ export default function Profile() {
 
   return (
     <View style={styles.page}>
-      {/* ================= HEADER ================= */}
-      <View style={styles.headerWrap}>
-        <View style={styles.profileRow}>
-          <Image source={avatarSource} style={styles.avatarImage} />
+      {/* Ginawang light-content para sa Blue Header */}
+      <StatusBar barStyle="light-content" backgroundColor="#01579B" />
 
-          <View style={styles.profileInfo}>
-            <Text style={styles.header} numberOfLines={1}>
-              {userName}
-            </Text>
-
-            <Text style={styles.subscription}>
-              {subType ? `Subscribed: ${subType}` : "Free Plan"}
+      {/* 🟦 BLUE HEADER (AIDesigner Layout + Signature Color) */}
+      <View style={styles.header}>
+        <View style={styles.headerTopRow}>
+          <View style={styles.avatarContainer}>
+            <Image source={avatarSource} style={styles.avatarImage} />
+            <View style={styles.onlineBadge} />
+          </View>
+          <View style={styles.headerTextInfo}>
+            <Text style={styles.headerTitle}>{userName}</Text>
+            <Text style={styles.headerSubtitle}>
+              {subType ? `${subType} Member` : "Free Plan User"}
             </Text>
           </View>
         </View>
-
-        <View style={styles.divider} />
       </View>
 
-      {/* ================= CONTENT ================= */}
-      <ScrollView contentContainerStyle={styles.container}>
-        <TouchableOpacity
-          style={styles.card}
-          onPress={() => router.push("/User/EditProfile")}
-        >
-          <Ionicons name="create-outline" size={30} color="#1E90FF" />
+      <ScrollView 
+        style={styles.container} 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.sectionLabel}>Account Settings</Text>
+
+        <TouchableOpacity style={styles.card} onPress={() => router.push("/User/EditProfile")}>
+          <View style={[styles.iconCircle, { backgroundColor: "#E0F2FE" }]}>
+            <Ionicons name="person-outline" size={22} color="#0284C7" />
+          </View>
           <View style={styles.cardContent}>
             <Text style={styles.cardTitle}>Edit Profile</Text>
-            <Text style={styles.cardSubtitle}>
-              Update your personal information
-            </Text>
+            <Text style={styles.cardSubtitle}>Update your name and gender</Text>
           </View>
-          <Ionicons name="chevron-forward" size={22} color="#999" />
+          <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.card}
-          onPress={() => router.push("/User/ChangePassword")}
-        >
-          <Ionicons name="lock-closed-outline" size={30} color="#C44569" />
+        <TouchableOpacity style={styles.card} onPress={() => router.push("/User/ChangePassword")}>
+          <View style={[styles.iconCircle, { backgroundColor: "#FEF2F2" }]}>
+            <Ionicons name="shield-checkmark-outline" size={22} color="#DC2626" />
+          </View>
           <View style={styles.cardContent}>
-            <Text style={styles.cardTitle}>Change Password</Text>
-            <Text style={styles.cardSubtitle}>Secure your account</Text>
+            <Text style={styles.cardTitle}>Security</Text>
+            <Text style={styles.cardSubtitle}>Change your password</Text>
           </View>
-          <Ionicons name="chevron-forward" size={22} color="#999" />
+          <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.card}
-          onPress={() => router.push("/User/ManageSubscription")}
-        >
-          <Ionicons name="card-outline" size={30} color="#2C3E50" />
+        <TouchableOpacity style={styles.card} onPress={() => router.push("/User/ManageSubscription")}>
+          <View style={[styles.iconCircle, { backgroundColor: "#F0FDF4" }]}>
+            <Ionicons name="card-outline" size={22} color="#16A34A" />
+          </View>
           <View style={styles.cardContent}>
-            <Text style={styles.cardTitle}>Manage Subscription</Text>
-            <Text style={styles.cardSubtitle}>
-              Current plan: {subType || "Free"}
-            </Text>
+            <Text style={styles.cardTitle}>Subscription Plan</Text>
+            <Text style={styles.cardSubtitle}>Current: {subType || "Free"}</Text>
           </View>
-          <Ionicons name="chevron-forward" size={22} color="#999" />
+          <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
         </TouchableOpacity>
 
-        <Button
-          icon={<Ionicons name="log-out-outline" size={28} color="#fff" />}
-          title="Logout"
-          subtitle="Sign out of your account"
-          onPress={() => setLogoutVisible(true)}
-          textColor="#fff"
-          backgroundColor="#C44569"
-        />
+        <View style={styles.logoutWrapper}>
+            <Button
+              icon={<Ionicons name="log-out-outline" size={22} color="#fff" />}
+              title="Logout"
+              onPress={() => setLogoutVisible(true)}
+              textColor="#fff"
+              backgroundColor="#0F3E48" // Dark Teal para sa Button
+            />
+        </View>
       </ScrollView>
 
       <BottomNavbar subType={subType} />
@@ -158,22 +149,12 @@ export default function Profile() {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Confirm Logout</Text>
-            <Text style={styles.modalText}>
-              Are you sure you want to logout?
-            </Text>
-
+            <Text style={styles.modalText}>Are you sure you want to logout from your account?</Text>
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => setLogoutVisible(false)}
-              >
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setLogoutVisible(false)}>
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.confirmBtn}
-                onPress={handleLogoutConfirmed}
-              >
+              <TouchableOpacity style={styles.confirmBtn} onPress={handleLogoutConfirmed}>
                 <Text style={styles.confirmText}>Logout</Text>
               </TouchableOpacity>
             </View>
@@ -184,113 +165,135 @@ export default function Profile() {
   );
 }
 
-/* ================= STYLES ================= */
-
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#F9FAFB" },
+  page: { flex: 1, backgroundColor: "#F8FAFC" },
 
-  headerWrap: {
-    paddingTop: 50,
-    paddingBottom: 24,
-    paddingHorizontal: 24,
-    backgroundColor: "#01579B",
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    minHeight: 170, // ✅ UI NEVER MOVES
-  },
-
-  profileRow: { flexDirection: "row", alignItems: "center" },
-
-  avatarImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    marginRight: 14,
-    borderWidth: 2,
-    borderColor: "#faf9f6",
-  },
-
-  profileInfo: { flexDirection: "column", flex: 1 },
-
+  /* ===== DEEP BLUE HEADER (AIDesigner Layout) ===== */
   header: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#faf9f6",
+    paddingTop: Platform.OS === 'ios' ? 60 : 50,
+    paddingHorizontal: 25,
+    paddingBottom: 35,
+    backgroundColor: "#01579B", // Ibinalik sa Blue
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
   },
-
-  subscription: {
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  avatarContainer: {
+    position: 'relative'
+  },
+  avatarImage: {
+    width: 70,
+    height: 70,
+    borderRadius: 24, // Squircle Look
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.5)",
+  },
+  onlineBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#22C55E', // Online green
+    borderWidth: 3,
+    borderColor: '#01579B' // Match sa header background
+  },
+  headerTextInfo: {
+    marginLeft: 18,
+  },
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#FFFFFF", // White text para sa blue background
+  },
+  headerSubtitle: {
     fontSize: 14,
-    color: "#faf9f6",
+    color: "rgba(255,255,255,0.8)", // Semi-transparent white
     marginTop: 2,
-    fontStyle: "italic",
+    fontWeight: "600"
   },
 
-  divider: {
-    width: "100%",
-    height: 4,
-    borderRadius: 2,
-    marginTop: 18,
-    backgroundColor: "#faf9f6",
-  },
+  /* ===== CONTENT ===== */
+  container: { flex: 1 },
+  scrollContent: { paddingHorizontal: 25, paddingBottom: 120 },
 
-  container: { padding: 20 },
+  sectionLabel: { 
+    fontSize: 12, 
+    fontWeight: "800", 
+    color: "#94A3B8", 
+    textTransform: "uppercase", 
+    letterSpacing: 1,
+    marginTop: 35,
+    marginBottom: 15
+  },
 
   card: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFF",
-    borderRadius: 18,
-    padding: 18,
-    marginBottom: 18,
+    borderRadius: 22,
+    padding: 16,
+    marginBottom: 15,
     borderWidth: 1,
-    borderColor: "#f1f1f1",
+    borderColor: "#F1F5F9",
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
   },
-
-  cardContent: { flex: 1, marginLeft: 14 },
-
+  iconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  cardContent: { flex: 1, marginLeft: 15 },
   cardTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "700",
-    color: "#2C3E50",
+    color: "#1E293B",
+  },
+  cardSubtitle: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
   },
 
-  cardSubtitle: {
-    fontSize: 13,
-    color: "#7F8C8D",
-    marginTop: 2,
+  logoutWrapper: {
+    marginTop: 10,
   },
 
   /* ===== MODAL ===== */
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
   },
-
   modalBox: {
-    width: "80%",
+    width: "85%",
     backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 30,
+    padding: 25,
   },
-
-  modalTitle: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
-
-  modalText: { fontSize: 14, color: "#555", marginBottom: 20 },
-
-  modalActions: { flexDirection: "row", justifyContent: "flex-end" },
-
-  cancelBtn: { paddingVertical: 8, paddingHorizontal: 16, marginRight: 10 },
-
-  cancelText: { color: "#555", fontWeight: "600" },
-
+  modalTitle: { fontSize: 20, fontWeight: "800", color: "#0F3E48", marginBottom: 10 },
+  modalText: { fontSize: 15, color: "#64748B", marginBottom: 25, lineHeight: 22 },
+  modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 10 },
+  cancelBtn: { paddingVertical: 10, paddingHorizontal: 18 },
+  cancelText: { color: "#64748B", fontWeight: "700" },
   confirmBtn: {
-    backgroundColor: "#C44569",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 10,
+    backgroundColor: "#DC2626",
+    paddingVertical: 10,
+    paddingHorizontal: 22,
+    borderRadius: 12,
   },
-
   confirmText: { color: "#fff", fontWeight: "700" },
 });

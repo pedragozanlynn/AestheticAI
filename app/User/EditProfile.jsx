@@ -28,7 +28,9 @@ export default function EditProfile() {
   const [form, setForm] = useState({
     name: "",
     email: "",
-    gender: "", // "Male" | "Female"
+    gender: "",
+    subscription_type: "Free", // default
+    createdAt: null,
   });
 
   /* ================= LOAD USER ================= */
@@ -43,10 +45,24 @@ export default function EditProfile() {
         const snap = await getDoc(doc(db, "users", uid));
         if (snap.exists()) {
           const data = snap.data();
+          
+          // Format date if createdAt exists
+          let formattedDate = "N/A";
+          if (data.createdAt) {
+            const date = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+            formattedDate = date.toLocaleDateString('en-US', {
+              month: 'long',
+              day: 'numeric',
+              year: 'numeric'
+            });
+          }
+
           setForm({
             name: data.name || "",
             email: data.email || "",
             gender: data.gender || "",
+            subscription_type: data.subscription_type || "Free",
+            createdAt: formattedDate,
           });
         }
       } catch (e) {
@@ -92,7 +108,7 @@ export default function EditProfile() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3fa796" />
+        <ActivityIndicator size="large" color="#01579B" />
       </View>
     );
   }
@@ -103,7 +119,7 @@ export default function EditProfile() {
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
     >
-      {/* ===== HEADER ===== */}
+      {/* ===== HEADER (UNCHANGED) ===== */}
       <View style={styles.profileHeaderRow}>
         <View style={styles.profileHeaderLeft}>
           <TouchableOpacity
@@ -124,211 +140,124 @@ export default function EditProfile() {
 
       <View style={styles.profileHeaderDivider} />
 
-      {/* ===== FORM ===== */}
+      {/* ===== ACCOUNT SUMMARY (NEW READ-ONLY SECTION) ===== */}
+      <View style={styles.infoRow}>
+         <View style={styles.infoBox}>
+            <Text style={styles.infoLabel}>Subscription</Text>
+            <Text style={styles.infoValue}>{form.subscription_type}</Text>
+         </View>
+         <View style={styles.infoBox}>
+            <Text style={styles.infoLabel}>Member Since</Text>
+            <Text style={styles.infoValue}>{form.createdAt}</Text>
+         </View>
+      </View>
+
+      {/* ===== FORM CARD ===== */}
       <View style={styles.card}>
         <Label text="Full Name" />
-        <TextInput
-          style={styles.input}
-          value={form.name}
-          onChangeText={(v) => setForm({ ...form, name: v })}
-          placeholder="Enter your full name"
-        />
-
-        <Label text="Email" />
-        <View style={styles.readonlyWrap}>
-          <Ionicons name="mail-outline" size={16} color="#999" />
+        <View style={styles.inputWrapper}>
+          <Ionicons name="person-outline" size={18} color="#94A3B8" style={styles.inputIcon} />
           <TextInput
-            style={styles.readonlyInput}
+            style={styles.input}
+            value={form.name}
+            onChangeText={(v) => setForm({ ...form, name: v })}
+            placeholder="Enter your full name"
+            placeholderTextColor="#94A3B8"
+          />
+        </View>
+
+        <Label text="Email Address" />
+        <View style={[styles.inputWrapper, styles.readonlyWrap]}>
+          <Ionicons name="mail-outline" size={18} color="#CBD5E1" style={styles.inputIcon} />
+          <TextInput
+            style={[styles.input, { color: "#94A3B8" }]}
             value={form.email}
             editable={false}
           />
         </View>
 
-        {/* ===== GENDER SELECTOR ===== */}
         <Label text="Gender" />
         <View style={styles.genderRow}>
-          {/* MALE */}
           <TouchableOpacity
-            style={[
-              styles.genderCard,
-              form.gender === "Male" && styles.genderActive,
-            ]}
+            style={[styles.genderCard, form.gender === "Male" && styles.genderActiveMale]}
             onPress={() => setForm({ ...form, gender: "Male" })}
           >
-            <Ionicons
-              name="male"
-              size={24}
-              color={form.gender === "Male" ? "#fff" : "#3FA796"}
-            />
-            <Text
-              style={[
-                styles.genderText,
-                form.gender === "Male" && styles.genderTextActive,
-              ]}
-            >
-              Male
-            </Text>
+            <Ionicons name="male" size={20} color={form.gender === "Male" ? "#fff" : "#0284C7"} />
+            <Text style={[styles.genderText, form.gender === "Male" && styles.genderTextActive]}>Male</Text>
           </TouchableOpacity>
 
-          {/* FEMALE */}
           <TouchableOpacity
-            style={[
-              styles.genderCard,
-              form.gender === "Female" && styles.genderActive,
-            ]}
+            style={[styles.genderCard, form.gender === "Female" && styles.genderActiveFemale]}
             onPress={() => setForm({ ...form, gender: "Female" })}
           >
-            <Ionicons
-              name="female"
-              size={24}
-              color={form.gender === "Female" ? "#fff" : "#C44569"}
-            />
-            <Text
-              style={[
-                styles.genderText,
-                form.gender === "Female" && styles.genderTextActive,
-              ]}
-            >
-              Female
-            </Text>
+            <Ionicons name="female" size={20} color={form.gender === "Female" ? "#fff" : "#DB2777"} />
+            <Text style={[styles.genderText, form.gender === "Female" && styles.genderTextActive]}>Female</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* ===== SAVE BUTTON ===== */}
-      <Button
-        title={saving ? "Saving..." : "Save Changes"}
-        onPress={handleSave}
-        disabled={saving}
-        backgroundColor="#3FA796"
-        textColor="#fff"
-        icon={<Ionicons name="save-outline" size={20} color="#fff" />}
-      />
+      <View style={styles.buttonWrapper}>
+        <Button
+          title={saving ? "Saving..." : "Save Changes"}
+          onPress={handleSave}
+          disabled={saving}
+          backgroundColor="#0F3E48"
+          textColor="#fff"
+          icon={<Ionicons name="checkmark-circle-outline" size={20} color="#fff" />}
+        />
+      </View>
     </ScrollView>
   );
 }
 
-/* ================= SMALL ================= */
 const Label = ({ text }) => <Text style={styles.label}>{text}</Text>;
 
-/* ================= STYLES ================= */
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F3F9FA" },
-  scrollContent: { padding: 16, paddingBottom: 40 },
+  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  scrollContent: { paddingHorizontal: 25, paddingBottom: 40 },
 
-  profileHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingTop: 30,
-    paddingBottom: 20,
-  },
+  profileHeaderRow: { flexDirection: "row", alignItems: "center", paddingTop: 30, paddingBottom: 20 },
   profileHeaderLeft: { flexDirection: "row", alignItems: "center" },
   profileHeaderAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#E3F2FD",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 16,
+    width: 42, height: 42, borderRadius: 14,
+    backgroundColor: "#F1F5F9", alignItems: "center", justifyContent: "center", marginRight: 16,
   },
-  profileHeaderTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F3E48",
+  profileHeaderTitle: { fontSize: 19, fontWeight: "900", color: "#0F3E48" },
+  profileHeaderSubtitle: { fontSize: 12, color: "#64748B" },
+  profileHeaderDivider: { height: 1, backgroundColor: "#F1F5F9", marginBottom: 20 },
+
+  /* NEW INFO ROW STYLE */
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20, gap: 12 },
+  infoBox: { 
+    flex: 1, backgroundColor: '#FFF', padding: 15, borderRadius: 16, 
+    borderWidth: 1, borderColor: '#F1F5F9', elevation: 1 
   },
-  profileHeaderSubtitle: { fontSize: 12, color: "#777" },
-  profileHeaderDivider: {
-    height: 1,
-    backgroundColor: "#E4E6EB",
-    marginBottom: 16,
-  },
+  infoLabel: { fontSize: 10, fontWeight: '800', color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4 },
+  infoValue: { fontSize: 13, fontWeight: '700', color: '#0F3E48' },
 
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 22,
-    marginBottom: 26,
-    borderWidth: 1,
-    borderColor: "#E5EEF2",
+    backgroundColor: "#fff", borderRadius: 24, padding: 24, marginBottom: 20,
+    borderWidth: 1, borderColor: "#F1F5F9", elevation: 2, shadowColor: "#000",
+    shadowOpacity: 0.03, shadowRadius: 10,
   },
-
-  label: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#6B7280",
-    marginTop: 16,
-    marginBottom: 6,
-    letterSpacing: 0.8,
+  label: { fontSize: 11, fontWeight: "800", color: "#475569", marginTop: 15, marginBottom: 8, textTransform: 'uppercase' },
+  inputWrapper: {
+    flexDirection: "row", alignItems: "center", backgroundColor: "#F8FAFC",
+    borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 16, paddingHorizontal: 15,
   },
-
-  input: {
-    backgroundColor: "#FAFCFD",
-    borderWidth: 1,
-    borderColor: "#E1E7EA",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: "#1F2937",
-  },
-
-  readonlyWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F1F5F9",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: "#E1E7EA",
-  },
-
-  readonlyInput: {
-    marginLeft: 10,
-    fontSize: 14,
-    color: "#9CA3AF",
-    flex: 1,
-  },
-
-  /* ===== GENDER ===== */
-  genderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 6,
-  },
-
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, paddingVertical: 12, fontSize: 15, fontWeight: "600", color: "#1E293B" },
+  readonlyWrap: { backgroundColor: "#F1F5F9", borderColor: "#E2E8F0" },
+  genderRow: { flexDirection: "row", gap: 10, marginTop: 6 },
   genderCard: {
-    flex: 1,
-    marginHorizontal: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E1E7EA",
-    paddingVertical: 8,
-    alignItems: "center",
-    backgroundColor: "#FAFCFD",
+    flex: 1, flexDirection: 'row', borderRadius: 14, borderWidth: 1,
+    borderColor: "#E2E8F0", paddingVertical: 12, alignItems: "center",
+    justifyContent: 'center', backgroundColor: "#FAFCFD", gap: 6,
   },
-
-  genderActive: {
-    backgroundColor: "#2c4f4f",
-    borderColor: "#2c4f4f",
-  },
-
-  genderText: {
-    marginTop: 4,
-    fontWeight: "700",
-    fontSize: 12,
-    color: "#374151",
-  },
-
-  genderTextActive: {
-    color: "#fff",
-  },
-
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  genderActiveMale: { backgroundColor: "#0284C7", borderColor: "#0284C7" },
+  genderActiveFemale: { backgroundColor: "#DB2777", borderColor: "#DB2777" },
+  genderText: { fontWeight: "800", fontSize: 13, color: "#64748B" },
+  genderTextActive: { color: "#fff" },
+  buttonWrapper: { marginTop: 5 },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
 });

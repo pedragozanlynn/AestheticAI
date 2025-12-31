@@ -17,6 +17,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  StatusBar,
 } from "react-native";
 import { db } from "../../config/firebase";
 import useSubscriptionType from "../../services/useSubscriptionType";
@@ -36,9 +37,7 @@ export default function Consultation() {
   useEffect(() => {
     const loadUser = async () => {
       const keys = await AsyncStorage.getAllKeys();
-      const profileKey = keys.find(k =>
-        k.startsWith("aestheticai:user-profile:")
-      );
+      const profileKey = keys.find(k => k.startsWith("aestheticai:user-profile:"));
       if (!profileKey) return;
       const data = await AsyncStorage.getItem(profileKey);
       setUser(JSON.parse(data));
@@ -47,25 +46,14 @@ export default function Consultation() {
   }, []);
 
   const categories = [
-    "All",
-    "Architectural Design",
-    "Residential Planning",
-    "Sustainable Architecture",
-    "Structural Engineering",
-    "Construction Engineering",
-    "Geotechnical Engineering",
-    "Residential Interior Design",
-    "Lighting Design",
-    "Furniture Design",
+    "All", "Architectural Design", "Residential Planning", "Sustainable Architecture",
+    "Structural Engineering", "Construction Engineering", "Geotechnical Engineering",
+    "Residential Interior Design", "Lighting Design", "Furniture Design",
   ];
 
   useEffect(() => {
     const fetchConsultantsAndRatings = async () => {
-      const consultantsQuery = query(
-        collection(db, "consultants"),
-        where("status", "==", "accepted")
-      );
-
+      const consultantsQuery = query(collection(db, "consultants"), where("status", "==", "accepted"));
       const consultantsSnap = await getDocs(consultantsQuery);
       const tempConsultants = consultantsSnap.docs.map(doc => ({
         id: doc.id,
@@ -76,92 +64,72 @@ export default function Consultation() {
 
       const ratingsSnap = await getDocs(collection(db, "ratings"));
       const ratingsByConsultant = {};
-
       ratingsSnap.docs.forEach(doc => {
         const r = doc.data();
-        if (!ratingsByConsultant[r.consultantId]) {
-          ratingsByConsultant[r.consultantId] = [];
-        }
+        if (!ratingsByConsultant[r.consultantId]) ratingsByConsultant[r.consultantId] = [];
         ratingsByConsultant[r.consultantId].push(r.rating);
       });
 
-      setConsultants(
-        tempConsultants.map(c => {
-          const ratings = ratingsByConsultant[c.id] || [];
+      setConsultants(tempConsultants.map(c => {
+        const ratings = ratingsByConsultant[c.id] || [];
+        const count = ratings.length;
+        const avg = count ? ratings.reduce((a, b) => a + b, 0) / count : 0;
+        return { ...c, reviewCount: count, averageRating: avg };
+      }));
+
+      return onSnapshot(collection(db, "ratings"), snapshot => {
+        const updated = {};
+        snapshot.docs.forEach(doc => {
+          const r = doc.data();
+          if (!updated[r.consultantId]) updated[r.consultantId] = [];
+          updated[r.consultantId].push(r.rating);
+        });
+        setConsultants(prev => prev.map(c => {
+          const ratings = updated[c.id] || [];
           const count = ratings.length;
           const avg = count ? ratings.reduce((a, b) => a + b, 0) / count : 0;
           return { ...c, reviewCount: count, averageRating: avg };
-        })
-      );
-
-      const unsubscribe = onSnapshot(
-        collection(db, "ratings"),
-        snapshot => {
-          const updated = {};
-          snapshot.docs.forEach(doc => {
-            const r = doc.data();
-            if (!updated[r.consultantId]) updated[r.consultantId] = [];
-            updated[r.consultantId].push(r.rating);
-          });
-
-          setConsultants(prev =>
-            prev.map(c => {
-              const ratings = updated[c.id] || [];
-              const count = ratings.length;
-              const avg = count ? ratings.reduce((a, b) => a + b, 0) / count : 0;
-              return { ...c, reviewCount: count, averageRating: avg };
-            })
-          );
-        }
-      );
-
-      return unsubscribe;
+        }));
+      });
     };
-
     fetchConsultantsAndRatings();
   }, []);
 
   const filteredConsultants = consultants
     .filter(c => {
       if (selectedCategory === "All") return true;
-      return (
-        safeLower(c.consultantType) === safeLower(selectedCategory) ||
-        safeLower(c.specialization) === safeLower(selectedCategory)
-      );
+      return safeLower(c.consultantType) === safeLower(selectedCategory) || safeLower(c.specialization) === safeLower(selectedCategory);
     })
-    .filter(c =>
-      safeLower(c.fullName).includes(safeLower(searchQuery))
-    );
+    .filter(c => safeLower(c.fullName).includes(safeLower(searchQuery)));
 
   return (
     <View style={styles.page}>
-      {/* ===== HEADER (FIXED HEIGHT – UI STABLE) ===== */}
+      <StatusBar barStyle="light-content" />
+      
+      {/* ===== PREMIUM HEADER ===== */}
       <View style={styles.header}>
-        <View style={styles.headerIcons}>
-          <TouchableOpacity
-            onPress={() => router.push("/User/ChatList")}
-            style={styles.iconBtn}
-          >
-            <Ionicons name="chatbubble-ellipses" size={24} color="#FFF" />
+        <View style={styles.headerTop}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <Ionicons name="chevron-back" size={28} color="#FFF" />
           </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => router.push("/User/Consultations")}
-            style={styles.iconBtn}
-          >
-            <Ionicons name="time" size={24} color="#FFF" />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={() => router.push("/User/ChatList")} style={styles.iconBtn}>
+              <Ionicons name="chatbubbles" size={22} color="#FFF" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push("/User/Consultations")} style={styles.iconBtn}>
+              <Ionicons name="calendar" size={22} color="#FFF" />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <Text style={styles.headerTitle}>Browse consultants</Text>
-        <Text style={styles.headerSubtitle}>
-          Connect with trusted experts in every field
-        </Text>
+        <Text style={styles.headerTitle}>Find Your Expert</Text>
+        <Text style={styles.headerSubtitle}>Consult with professional architects and designers</Text>
 
         <View style={styles.searchContainer}>
-          <Ionicons name="search-outline" size={20} color="#AAA" />
+          <Ionicons name="search" size={20} color="#94A3B8" />
           <TextInput
-            placeholder="Search by name or skill..."
+            placeholder="Search name or expertise..."
+            placeholderTextColor="#94A3B8"
             style={styles.searchInput}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -169,84 +137,67 @@ export default function Consultation() {
         </View>
       </View>
 
+      {/* ===== CATEGORY FILTER ===== */}
       <View style={styles.categoryBar}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryScroll}
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
           {categories.map(cat => {
             const active = selectedCategory === cat;
             return (
               <TouchableOpacity
                 key={cat}
                 onPress={() => setSelectedCategory(cat)}
-                style={[
-                  styles.categoryChip,
-                  active && styles.categoryChipActive,
-                ]}
+                style={[styles.categoryChip, active && styles.categoryChipActive]}
               >
-                <Text
-                  style={[
-                    styles.categoryText,
-                    active && styles.categoryTextActive,
-                  ]}
-                >
-                  {cat}
-                </Text>
+                <Text style={[styles.categoryText, active && styles.categoryTextActive]}>{cat}</Text>
               </TouchableOpacity>
             );
           })}
         </ScrollView>
       </View>
 
-      {/* ===== CONSULTANT LIST (NO CONDITIONAL LAYOUT SHIFT) ===== */}
-      <ScrollView
-        style={styles.consultantList}
-        contentContainerStyle={styles.listContent}
-      >
-        {filteredConsultants.map(c => (
-          <TouchableOpacity
-            key={c.id}
-            style={styles.consultantCard}
-            onPress={() =>
-              router.push(`/User/ConsultantProfile?consultantId=${c.id}`)
-            }
-          >
-            <Image
-              source={
-                c.avatar
-                  ? { uri: c.avatar }
-                  : c.gender === "Female"
-                  ? require("../../assets/office-woman.png")
-                  : require("../../assets/office-man.png")
-              }
-              style={styles.avatar}
-            />
-
-            <View style={{ flex: 1, marginLeft: 15 }}>
-              <Text style={styles.consultantName}>{c.fullName}</Text>
-              <Text style={styles.consultantTitle}>{c.consultantType}</Text>
-              <Text style={styles.consultantBio}>{c.specialization}</Text>
-
-              <View style={{ flexDirection: "row", marginTop: 6 }}>
-                {[1, 2, 3, 4, 5].map(i => (
-                  <Ionicons
-                    key={i}
-                    name={i <= Math.floor(c.averageRating) ? "star" : "star-outline"}
-                    size={16}
-                    color="#FFD700"
-                  />
-                ))}
-                <Text style={{ marginLeft: 6, fontSize: 12 }}>
-                  ({c.averageRating.toFixed(1)} / {c.reviewCount})
-                </Text>
+      {/* ===== CONSULTANT CARDS ===== */}
+      <ScrollView style={styles.consultantList} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+        {filteredConsultants.length > 0 ? (
+          filteredConsultants.map(c => (
+            <TouchableOpacity
+              key={c.id}
+              style={styles.consultantCard}
+              onPress={() => router.push(`/User/ConsultantProfile?consultantId=${c.id}`)}
+              activeOpacity={0.9}
+            >
+              <View style={styles.cardHeader}>
+                <Image
+                  source={c.avatar ? { uri: c.avatar } : (c.gender === "Female" ? require("../../assets/office-woman.png") : require("../../assets/office-man.png"))}
+                  style={styles.avatar}
+                />
+                <View style={styles.mainInfo}>
+                  <Text style={styles.consultantName} numberOfLines={1}>{c.fullName}</Text>
+                  <Text style={styles.consultantTitle}>{c.consultantType}</Text>
+                  <View style={styles.ratingRow}>
+                    <Ionicons name="star" size={14} color="#F59E0B" />
+                    <Text style={styles.ratingText}>{c.averageRating.toFixed(1)}</Text>
+                    <Text style={styles.reviewText}>({c.reviewCount} reviews)</Text>
+                  </View>
+                </View>
+                <View style={styles.goBtn}>
+                  <Ionicons name="chevron-forward" size={20} color="#01579B" />
+                </View>
               </View>
-            </View>
-
-            <Ionicons name="chatbubble-outline" size={24} color="#0F3E48" />
-          </TouchableOpacity>
-        ))}
+              
+              <View style={styles.cardFooter}>
+                <View style={styles.specTag}>
+                  <Ionicons name="ribbon-outline" size={14} color="#01579B" />
+                  <Text style={styles.specText} numberOfLines={1}>{c.specialization}</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          ))
+        ) : (
+          <View style={styles.emptyState}>
+            <Ionicons name="search-outline" size={50} color="#CBD5E1" />
+            <Text style={styles.emptyText}>No consultants found</Text>
+          </View>
+        )}
       </ScrollView>
 
       <BottomNavbar subType={subType} />
@@ -254,144 +205,79 @@ export default function Consultation() {
   );
 }
 
-/* ================= STYLES ================= */
-
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#F3F9FA" },
+  page: { flex: 1, backgroundColor: "#F8FAFC" },
 
-  /* 🔒 HEADER FIXED HEIGHT */
   header: {
     backgroundColor: "#01579B",
-    paddingTop: 80,
-    paddingBottom: 10,
+    paddingTop: 40,
+    paddingBottom: 25,
     paddingHorizontal: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    minHeight: 200, // ✅ UI NEVER JUMPS
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
   },
-
-  headerIcons: {
-    position: "absolute",
-    top: 20,
-    right: 10,
-    flexDirection: "row",
-    gap: 5,
-  },
-
-  iconBtn: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.15)",
-  },
-
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#FFF",
-    marginBottom: 6,
-  },
-
-  headerSubtitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#E1F5FE",
-    marginBottom: 18,
-  },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  headerActions: { flexDirection: 'row', gap: 10 },
+  iconBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.15)", justifyContent: 'center', alignItems: 'center' },
+  backBtn: { marginLeft: -5 },
+  headerTitle: { fontSize: 26, fontWeight: "900", color: "#FFF" },
+  headerSubtitle: { fontSize: 14, color: "#B3E5FC", marginTop: 4, marginBottom: 20 },
 
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFF",
-    borderRadius: 25,
-    paddingHorizontal: 14,
-    height: 48,
+    borderRadius: 15,
+    paddingHorizontal: 15,
+    height: 50,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
   },
+  searchInput: { flex: 1, marginLeft: 10, fontSize: 15, color: '#1E293B' },
 
-  searchInput: { flex: 1, marginLeft: 10, fontSize: 15 },
-
-  categoryBar: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#BBDEFB",
-  },
-
-  categoryScroll: { flexDirection: "row", gap: 10 },
-
+  categoryBar: { paddingVertical: 15, backgroundColor: "#F8FAFC" },
+  categoryScroll: { paddingHorizontal: 20, gap: 8 },
   categoryChip: {
     paddingHorizontal: 16,
-    height: 38,
-    borderRadius: 20,
-    backgroundColor: "#faf9f6",
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
-
-  categoryChipActive: { backgroundColor: "#912f56" },
-
-  categoryText: { fontSize: 14, color: "#912f56" },
-
-  categoryTextActive: { color: "#FFF", fontWeight: "700" },
+  categoryChipActive: { backgroundColor: "#01579B", borderColor: "#01579B" },
+  categoryText: { fontSize: 13, color: "#64748B", fontWeight: "600" },
+  categoryTextActive: { color: "#FFF" },
 
   consultantList: { flex: 1 },
-
-  listContent: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 120, // ✅ SAFE SCROLL SPACE
-  },
+  listContent: { paddingHorizontal: 20, paddingBottom: 100 },
 
   consultantCard: {
-    flexDirection: "row",
-    backgroundColor: "#faf9f6",
+    backgroundColor: "#FFF",
     borderRadius: 20,
-    padding: 16,
-    marginBottom: 16,
-    elevation: 4,
+    padding: 15,
+    marginBottom: 15,
     shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    alignItems: "center",
-    borderLeftWidth: 4,
-    borderLeftColor: "#0288D1", // ocean blue accent strip
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
   },
-  avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 2,
-    borderColor: "#8f2f52",
-    backgroundColor: "#912f56",
-    shadowColor: "#0288D1",
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-  },
+  cardHeader: { flexDirection: "row", alignItems: "center" },
+  avatar: { width: 65, height: 65, borderRadius: 18, backgroundColor: "#F1F5F9" },
+  mainInfo: { flex: 1, marginLeft: 15 },
+  consultantName: { fontSize: 16, fontWeight: "800", color: "#1E293B" },
+  consultantTitle: { fontSize: 12, fontWeight: "600", color: "#01579B", marginTop: 2 },
+  ratingRow: { flexDirection: "row", alignItems: "center", marginTop: 5, gap: 4 },
+  ratingText: { fontSize: 13, fontWeight: "700", color: "#1E293B" },
+  reviewText: { fontSize: 12, color: "#94A3B8" },
+  goBtn: { width: 32, height: 32, borderRadius: 10, backgroundColor: "#F0F9FF", justifyContent: 'center', alignItems: 'center' },
 
-  avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 2,
-    borderColor: "#8f2f52",
-  },
+  cardFooter: { marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: "#F1F5F9" },
+  specTag: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F0F9FF', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, alignSelf: 'flex-start' },
+  specText: { fontSize: 11, fontWeight: '700', color: '#01579B', maxWidth: 200 },
 
-  consultantName: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#0F3E48",
-  },
-  consultantTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#8f2f52",
-    marginTop: 2,
-  },
-  consultantBio: { fontSize: 13, color: "#555" },
+  emptyState: { alignItems: 'center', marginTop: 50 },
+  emptyText: { marginTop: 10, color: '#94A3B8', fontWeight: '600' }
 });

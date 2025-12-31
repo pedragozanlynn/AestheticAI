@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Platform } from "react-native";
 import { useRouter } from "expo-router";
 
 export default function UpgradeInfo() {
@@ -8,60 +8,59 @@ export default function UpgradeInfo() {
 
   return (
     <View style={styles.page}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      {/* Dark content status bar para sa malinis na look */}
+      <StatusBar barStyle="dark-content" backgroundColor="#FDFEFF" />
+      
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
-        {/* HEADER */}
+        {/* HEADER - Dark Teal Title */}
         <View style={styles.header}>
-          <Ionicons
-            name="arrow-back"
-            size={28}
-            color="#0F3E48"
-            onPress={() => router.back()}
-          />
-          <Text style={styles.headerTitle}>Upgrade to Premium</Text>
+          <TouchableOpacity style={styles.backCircle} onPress={() => router.back()}>
+            <Ionicons name="chevron-back" size={24} color="#2c4f4f" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Premium Plan</Text>
         </View>
 
-        {/* TITLE */}
-        <Text style={styles.title}>Unlock All Premium Features</Text>
-        <Text style={styles.subtitle}>
-          Get full access to consultations, unlimited AI designs, and exclusive tools.
-        </Text>
+        {/* HERO SECTION */}
+        <View style={styles.heroContainer}>
+            <View style={styles.premiumBadge}>
+                <Ionicons name="diamond" size={16} color="#01579B" />
+                <Text style={styles.badgeText}>EXCLUSIVE ACCESS</Text>
+            </View>
+            <Text style={styles.title}>Unlock All Premium Features</Text>
+            <Text style={styles.subtitle}>
+                Transform your space with full access to our elite AI tools and expert consultations.
+            </Text>
+        </View>
 
-        {/* FEATURE LIST */}
+        {/* FEATURE LIST CARD - Deep Blue & Dark Teal Accents */}
         <View style={styles.card}>
-          <View style={styles.row}>
-            <Ionicons name="checkmark-circle" size={24} color="#2ecc71" />
-            <Text style={styles.feature}>Unlimited AI Room Designs</Text>
-          </View>
-
-          <View style={styles.row}>
-            <Ionicons name="checkmark-circle" size={24} color="#2ecc71" />
-            <Text style={styles.feature}>1-on-1 Chat with Consultants</Text>
-          </View>
-
-          <View style={styles.row}>
-            <Ionicons name="checkmark-circle" size={24} color="#2ecc71" />
-            <Text style={styles.feature}>Premium Tools & Suggestions</Text>
-          </View>
-
-          <View style={styles.row}>
-            <Ionicons name="checkmark-circle" size={24} color="#2ecc71" />
-            <Text style={styles.feature}>Priority Support</Text>
-          </View>
+          <Text style={styles.cardLabel}>WHAT'S INCLUDED</Text>
+          
+          <FeatureRow icon="color-wand" text="Unlimited AI Room Designs" />
+          <FeatureRow icon="chatbubble-ellipses" text="1-on-1 Chat with Consultants" />
+          <FeatureRow icon="sparkles" text="Premium Tools & Suggestions" />
+          <FeatureRow icon="shield-checkmark" text="Priority Customer Support" />
         </View>
 
-        {/* PRICE BOX */}
+        {/* PRICE BOX - Dark Teal Price */}
         <View style={styles.priceBox}>
-          <Text style={styles.price}>₱249</Text>
-          <Text style={styles.perMonth}>per month</Text>
+          <View style={styles.priceRow}>
+            <Text style={styles.currency}>₱</Text>
+            <Text style={styles.price}>499</Text>
+            <Text style={styles.perMonth}>/mo</Text>
+          </View>
+          <Text style={styles.cancelText}>Cancel anytime. No hidden fees.</Text>
         </View>
 
-        {/* BUTTON */}
+        {/* BUTTON - Bright Teal-Green (Consultant Style) */}
         <TouchableOpacity
+          activeOpacity={0.8}
           style={styles.upgradeButton}
           onPress={() => router.push("/User/UpgradePayment")}
         >
           <Text style={styles.upgradeText}>Continue to Upgrade</Text>
+          <Ionicons name="arrow-forward" size={20} color="#FFF" />
         </TouchableOpacity>
 
       </ScrollView>
@@ -69,90 +68,173 @@ export default function UpgradeInfo() {
   );
 }
 
-/* STYLES */
+const FeatureRow = ({ icon, text }) => (
+    <View style={styles.row}>
+        <View style={styles.iconWrapper}>
+            <Ionicons name={icon} size={20} color="#01579B" />
+        </View>
+        <Text style={styles.feature}>{text}</Text>
+        {/* Green checkmark para sa visual confirmation */}
+        <Ionicons name="checkmark-circle" size={22} color="#3fa796" style={{marginLeft: 'auto'}} />
+    </View>
+);
+
 const styles = StyleSheet.create({
   page: {
     flex: 1,
-    backgroundColor: "#F3F9FA",
+    backgroundColor: "#FDFEFF",
   },
-
+  scrollContent: {
+    paddingBottom: 40,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 20,
-    gap: 15,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    marginBottom: 20,
+  },
+  backCircle: {
+    width: 45,
+    height: 45,
+    borderRadius: 15,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 3,
+    shadowColor: '#2c4f4f',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#0F3E48",
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#2c4f4f", // Dark Teal
+    marginLeft: 15,
   },
-
+  heroContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 30,
+    marginVertical: 10,
+  },
+  premiumBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F7FF', // Soft Light Blue
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 15,
+    gap: 6,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#01579B', // Deep Blue
+    letterSpacing: 1,
+  },
   title: {
-    fontSize: 26,
-    fontWeight: "700",
-    color: "#0F3E48",
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#2c4f4f", // Dark Teal
     textAlign: "center",
-    marginTop: 10,
+    lineHeight: 34,
   },
-
   subtitle: {
     textAlign: "center",
-    color: "#4A6B70",
-    marginHorizontal: 30,
-    marginTop: 8,
+    color: "#64748B",
+    marginTop: 12,
     fontSize: 15,
+    lineHeight: 22,
   },
-
   card: {
-    backgroundColor: "#FFF",
-    marginHorizontal: 20,
-    borderRadius: 15,
-    padding: 20,
-    marginTop: 20,
-    elevation: 3,
+    backgroundColor: "#fff",
+    marginHorizontal: 25,
+    borderRadius: 25,
+    padding: 24,
+    marginTop: 30,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+    elevation: 5,
+    shadowColor: '#2c4f4f',
+    shadowOpacity: 0.1,
+    shadowRadius: 15,
   },
-
+  cardLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#94A3B8',
+    letterSpacing: 1.5,
+    marginBottom: 20,
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
-    gap: 10,
+    marginBottom: 18,
+    gap: 15,
   },
-
+  iconWrapper: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#F0F7FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   feature: {
-    fontSize: 16,
-    color: "#0F3E48",
-    fontWeight: "500",
+    fontSize: 15,
+    color: "#1E293B",
+    fontWeight: "600",
   },
-
   priceBox: {
     alignItems: "center",
-    marginTop: 30,
+    marginTop: 35,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  currency: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: "#2c4f4f",
+    marginRight: 2,
   },
   price: {
-    fontSize: 42,
-    fontWeight: "800",
-    color: "#0F3E48",
+    fontSize: 54,
+    fontWeight: "900",
+    color: "#2c4f4f", // Dark Teal
+    letterSpacing: -2,
   },
   perMonth: {
-    fontSize: 16,
-    color: "#4A6B70",
-    marginTop: -5,
+    fontSize: 18,
+    color: "#64748B",
+    fontWeight: '600',
   },
-
+  cancelText: {
+    fontSize: 13,
+    color: "#94A3B8",
+    marginTop: 5,
+  },
   upgradeButton: {
-    backgroundColor: "#0F3E48",
+    backgroundColor: "#3fa796", // Bright Teal-Green (Consultant Color)
     marginHorizontal: 30,
-    paddingVertical: 16,
-    borderRadius: 12,
+    height: 65,
+    borderRadius: 22,
     marginTop: 30,
-    marginBottom: 40,
+    flexDirection: 'row',
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 10,
+    shadowColor: "#3fa796",
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
   },
   upgradeText: {
     color: "#FFF",
-    textAlign: "center",
-    fontWeight: "700",
+    fontWeight: "800",
     fontSize: 18,
+    letterSpacing: 0.5,
   },
 });

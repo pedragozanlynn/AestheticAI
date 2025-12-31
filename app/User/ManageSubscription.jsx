@@ -6,6 +6,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  ScrollView,
+  Platform,
+  StatusBar
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -20,7 +23,6 @@ export default function ManageSubscription() {
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  /* ================= LOAD USER SUBSCRIPTION ================= */
   useEffect(() => {
     const loadSubscription = async () => {
       try {
@@ -44,7 +46,7 @@ export default function ManageSubscription() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3fa796" />
+        <ActivityIndicator size="large" color="#01579B" />
       </View>
     );
   }
@@ -52,7 +54,7 @@ export default function ManageSubscription() {
   if (!userData) {
     return (
       <View style={styles.center}>
-        <Text>User data not found</Text>
+        <Text style={styles.errorText}>User data not found</Text>
       </View>
     );
   }
@@ -65,224 +67,151 @@ export default function ManageSubscription() {
 
   const isPremium = subscription_type === "Premium";
 
+  const formatNumericDate = (firebaseTimestamp) => {
+    if (!firebaseTimestamp?.toDate) return "—";
+    const date = firebaseTimestamp.toDate();
+    return date.toLocaleDateString('en-US'); 
+  };
+
   return (
     <View style={styles.container}>
-      {/* ===== HEADER (PROJECT / EDIT PROFILE STYLE) ===== */}
-      <View style={styles.profileHeaderRow}>
-        <View style={styles.profileHeaderLeft}>
-          <TouchableOpacity
-            style={styles.profileHeaderAvatar}
-            onPress={router.back}
-          >
-            <Ionicons name="arrow-back" size={20} color="#0F3E48" />
+      {/* DAHIL GUSTO MO NG BLACK HEADER:
+         barStyle="dark-content" para maging black ang oras at icons sa pinakataas.
+         backgroundColor="white" para mag-match sa header color.
+      */}
+      <StatusBar barStyle="dark-content" backgroundColor="#FDFEFF" />
+      
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        
+        {/* ===== HEADER (All Black) ===== */}
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backCircle} onPress={() => router.back()}>
+            {/* Kulay Black na Icon */}
+            <Ionicons name="chevron-back" size={24} color="#000" />
           </TouchableOpacity>
-
           <View>
-            <Text style={styles.profileHeaderTitle}>My Subscription</Text>
-            <Text style={styles.profileHeaderSubtitle}>
-              Manage your current plan
-            </Text>
+            {/* Kulay Black na Title at Subtitle */}
+            <Text style={styles.headerTitle}>Subscription</Text>
+            <Text style={styles.headerSubtitle}>Manage your current plan</Text>
           </View>
         </View>
-      </View>
 
-      <View style={styles.profileHeaderDivider} />
+        {/* ===== HERO CARD (Solid Deep Blue for Premium) ===== */}
+        <View style={[styles.heroCard, isPremium ? styles.heroPremium : styles.heroFree]}>
+            <View style={styles.heroTopRow}>
+                <View style={[styles.iconBox, { backgroundColor: isPremium ? 'rgba(255,255,255,0.2)' : 'rgba(1, 87, 155, 0.05)' }]}>
+                    <Ionicons 
+                        name={isPremium ? "diamond" : "flash-outline"} 
+                        size={32} 
+                        color={isPremium ? "#FFF" : "#01579B"} 
+                    />
+                </View>
+                <View style={[styles.planBadge, { backgroundColor: isPremium ? '#FFD700' : '#E2E8F0' }]}>
+                    <Text style={[styles.planBadgeText, { color: '#01579B' }]}>
+                        {isPremium ? "PRO" : "BASIC"}
+                    </Text>
+                </View>
+            </View>
 
-      {/* ===== CARD ===== */}
-      <View style={styles.card}>
-        <View style={styles.badgeRow}>
-          
-          <Text style={styles.planText}>
-            {isPremium ? "Premium Plan" : "Free Plan"}
-          </Text>
+            <View style={styles.heroTextContainer}>
+                <Text style={[styles.heroPlanName, { color: isPremium ? "#FFF" : "#01579B" }]}>
+                    {isPremium ? "Premium Member" : "Free Explorer"}
+                </Text>
+                <Text style={[styles.heroStatusText, { color: isPremium ? "#FFF" : "#64748B" }]}>
+                    {isPremium ? "Full access to AI tools & Consultations" : "Upgrade for full analysis access"}
+                </Text>
+            </View>
         </View>
 
-        <InfoRow
-          label="Status"
-          value={isPremium ? "Active" : "Not Subscribed"}
-          highlight={isPremium}
-        />
+        {/* ===== PLAN DETAILS CARD ===== */}
+        <View style={styles.card}>
+          <Text style={styles.cardSectionLabel}>Plan Details</Text>
+          
+          <InfoRow label="Current Status" value={isPremium ? "Active" : "Not Subscribed"} highlight={isPremium} icon="shield-checkmark-outline" />
+          <InfoRow label="Consultation" value={isPremium ? "Access Granted" : "Locked"} highlight={isPremium} icon="chatbubbles-outline" />
+          <InfoRow label="Subscribed On" value={formatNumericDate(subscribed_at)} icon="calendar-outline" />
+          <InfoRow label="Renewal Date" value={formatNumericDate(subscription_expires_at)} icon="time-outline" isLast />
+        </View>
 
-        <InfoRow
-          label="Subscribed On"
-          value={
-            subscribed_at?.toDate
-              ? subscribed_at.toDate().toDateString()
-              : "—"
-          }
-        />
-
-        <InfoRow
-          label="Expires On"
-          value={
-            subscription_expires_at?.toDate
-              ? subscription_expires_at.toDate().toDateString()
-              : "—"
-          }
-        />
-      </View>
-
-      {/* ===== ACTION ===== */}
-      {isPremium ? (
-        <TouchableOpacity
-          style={styles.secondaryBtn}
-          onPress={() =>
-            Alert.alert(
-              "Premium Active",
-              "Your subscription is currently active."
-            )
-          }
-        >
-          <Text style={styles.secondaryText}>Premium Active</Text>
-        </TouchableOpacity>
-      ) : (
-        <TouchableOpacity
-          style={styles.primaryBtn}
-          onPress={() => router.push("/User/Subscribe")}
-        >
-          <Text style={styles.primaryText}>Upgrade to Premium</Text>
-        </TouchableOpacity>
-      )}
+        {/* ===== FOOTER ACTIONS ===== */}
+        <View style={styles.footer}>
+            {isPremium ? (
+                <TouchableOpacity style={styles.secondaryBtn} onPress={() => Alert.alert("Billing", "Opening billing settings...")}>
+                    <Ionicons name="card-outline" size={20} color="#01579B" style={{marginRight: 10}} />
+                    <Text style={styles.secondaryText}>Manage Billing</Text>
+                </TouchableOpacity>
+            ) : (
+                <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push("/User/Subscribe")}>
+                    <Text style={styles.primaryText}>Upgrade to Premium</Text>
+                    <Ionicons name="sparkles" size={18} color="#fff" />
+                </TouchableOpacity>
+            )}
+            
+            <Text style={styles.footerHint}>
+                {isPremium 
+                    ? "Your Premium plan includes priority AI processing and expert consultation access." 
+                    : "Upgrade to unlock professional consultations and unlimited aesthetic analysis."}
+            </Text>
+        </View>
+      </ScrollView>
     </View>
   );
 }
 
-/* ================= SMALL COMPONENT ================= */
-
-const InfoRow = ({ label, value, highlight }) => (
-  <View style={styles.infoRow}>
-    <Text style={styles.infoLabel}>{label}</Text>
-    <Text
-      style={[
-        styles.infoValue,
-        highlight && { color: "#3fa796", fontWeight: "800" },
-      ]}
-    >
+const InfoRow = ({ label, value, highlight, icon, isLast }) => (
+  <View style={[styles.infoRow, isLast && { borderBottomWidth: 0 }]}>
+    <View style={styles.infoLeft}>
+        <View style={styles.miniIconBg}>
+            <Ionicons name={icon} size={18} color="#01579B" />
+        </View>
+        <Text style={styles.infoLabel}>{label}</Text>
+    </View>
+    <Text style={[styles.infoValue, highlight && styles.highlightText]}>
       {value}
     </Text>
   </View>
 );
 
-/* ================= STYLES ================= */
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F3F9FA",
-    padding: 16,
+  container: { flex: 1, backgroundColor: "#FDFEFF" },
+  scrollContent: { 
+    paddingHorizontal: 25, 
+    paddingBottom: 40, 
+    paddingTop: Platform.OS === 'ios' ? 60 : 30 
   },
-
-  /* ===== HEADER STYLES (MATCHED) ===== */
-  profileHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingTop: 30,
-    paddingBottom: 20,
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 30 },
+  backCircle: {
+    width: 45, height: 45, borderRadius: 15, backgroundColor: '#FFF',
+    justifyContent: 'center', alignItems: 'center', marginRight: 15,
+    shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 10, elevation: 2,
   },
-
-  profileHeaderLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  profileHeaderAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#E3F2FD",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 16,
-  },
-
-  profileHeaderTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F3E48",
-  },
-
-  profileHeaderSubtitle: {
-    fontSize: 12,
-    color: "#777",
-  },
-
-  profileHeaderDivider: {
-    height: 1,
-    backgroundColor: "#E4E6EB",
-    marginBottom: 16,
-  },
-
-  /* ===== CARD ===== */
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: "#E1E8EA",
-  },
-
-  badgeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
-  },
-
-  planText: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#0F3E48",
-  },
-
-  infoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderColor: "#EEF2F3",
-  },
-
-  infoLabel: {
-    color: "#777",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-
-  infoValue: {
-    color: "#333",
-    fontSize: 13,
-  },
-
-  primaryBtn: {
-    backgroundColor: "#3fa796",
-    paddingVertical: 15,
-    borderRadius: 16,
-    alignItems: "center",
-  },
-
-  primaryText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 15,
-  },
-
-  secondaryBtn: {
-    backgroundColor: "#EAF6F3",
-    paddingVertical: 15,
-    borderRadius: 16,
-    alignItems: "center",
-  },
-
-  secondaryText: {
-    color: "#3fa796",
-    fontWeight: "800",
-    fontSize: 15,
-  },
-
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  // NAKA-BLACK NA DITO
+  headerTitle: { fontSize: 20, fontWeight: "900", color: "#2c4f4f", letterSpacing: -0.5 },
+  headerSubtitle: { fontSize: 13, color: "#000", fontWeight: '500', opacity: 0.6 },
+  
+  heroCard: { borderRadius: 30, padding: 25, marginBottom: 30, overflow: 'hidden', height: 200, justifyContent: 'space-between' },
+  heroPremium: { backgroundColor: '#01579B', shadowColor: '#01579B', shadowOpacity: 0.4, shadowRadius: 15, elevation: 8 },
+  heroFree: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#F1F5F9' },
+  heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  iconBox: { width: 60, height: 60, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  planBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  planBadgeText: { fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  heroPlanName: { fontSize: 24, fontWeight: '900', marginBottom: 4 },
+  heroStatusText: { fontSize: 14, fontWeight: '600' },
+  card: { backgroundColor: "#fff", borderRadius: 25, padding: 24, marginBottom: 30, borderWidth: 1, borderColor: "#F1F5F9", elevation: 2 },
+  cardSectionLabel: { fontSize: 12, fontWeight: '800', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 20 },
+  infoRow: { flexDirection: "row", justifyContent: "space-between", alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: "#F8FAFC" },
+  infoLeft: { flexDirection: 'row', alignItems: 'center' },
+  miniIconBg: { width: 36, height: 36, borderRadius: 12, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  infoLabel: { color: "#64748B", fontSize: 14, fontWeight: "600" },
+  infoValue: { color: "#01579B", fontSize: 14, fontWeight: '700' },
+  highlightText: { color: "#01579B", fontWeight: "900" },
+  footer: { gap: 15 },
+  primaryBtn: { backgroundColor: "#01579B", height: 65, borderRadius: 22, alignItems: "center", flexDirection: 'row', justifyContent: 'center', gap: 12 },
+  primaryText: { color: "#fff", fontWeight: "800", fontSize: 16 },
+  secondaryBtn: { backgroundColor: "#FFF", height: 65, borderRadius: 22, alignItems: "center", flexDirection: 'row', justifyContent: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
+  secondaryText: { color: "#01579B", fontWeight: "800", fontSize: 16 },
+  footerHint: { textAlign: 'center', fontSize: 12, color: '#94A3B8', paddingHorizontal: 40, lineHeight: 18 },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: '#FDFEFF' },
+  errorText: { color: '#64748B', fontWeight: '600' }
 });

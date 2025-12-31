@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,7 +13,9 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  StatusBar,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { db } from "../../config/firebase";
@@ -22,28 +24,25 @@ import { pickFile } from "../../services/fileUploadService";
 import { handleUnsendMessage } from "../../services/handleUnsendMessage";
 import { useSendMessage } from "../../services/useSendMessage";
 
-/* ================= AUTO COMPLETE UTILS ================= */
 const TWELVE_HOURS = 12 * 60 * 60 * 1000;
 const isAfter12Hours = (timestamp) => {
   if (!timestamp?.toDate) return false;
   return Date.now() - timestamp.toDate().getTime() > TWELVE_HOURS;
 };
 
-/* ================= ACTIVE STATUS FORMAT ================= */
 const formatLastSeen = (timestamp) => {
   if (!timestamp?.toDate) return "Active recently";
   const last = timestamp.toDate();
   const now = new Date();
   const diffMin = Math.floor((now - last) / 60000);
   if (diffMin < 1) return "Active just now";
-  if (diffMin < 60) return `Active ${diffMin} minutes ago`;
+  if (diffMin < 60) return `${diffMin}m ago`;
   const diffHr = Math.floor(diffMin / 60);
-  return diffHr < 24
-    ? `Active ${diffHr} hour${diffHr > 1 ? "s" : ""} ago`
-    : `Active ${Math.floor(diffHr / 24)} days ago`;
+  return diffHr < 24 ? `${diffHr}h ago` : `${Math.floor(diffHr / 24)}d ago`;
 };
 
 export default function ChatRoom() {
+  const router = useRouter();
   const { roomId, userId: routeUserId } = useLocalSearchParams();
 
   const [messages, setMessages] = useState([]);
@@ -58,13 +57,10 @@ export default function ChatRoom() {
   const flatListRef = useRef(null);
   const unsubRef = useRef(null);
 
-  /* ================= LOAD CONSULTANT ================= */
   useEffect(() => {
     const loadProfile = async () => {
       const keys = await AsyncStorage.getAllKeys();
-      const profileKey = keys.find((k) =>
-        k.startsWith("aestheticai:user-profile:")
-      );
+      const profileKey = keys.find((k) => k.startsWith("aestheticai:user-profile:"));
       if (!profileKey) return;
       const parsed = JSON.parse(await AsyncStorage.getItem(profileKey));
       if (parsed?.uid) setConsultant({ id: parsed.uid, ...parsed });
@@ -72,7 +68,6 @@ export default function ChatRoom() {
     loadProfile();
   }, []);
 
-  /* ================= LOAD CLIENT ================= */
   useEffect(() => {
     if (!routeUserId) return;
     return onSnapshot(doc(db, "users", routeUserId), (snap) => {
@@ -80,17 +75,12 @@ export default function ChatRoom() {
     });
   }, [routeUserId]);
 
-  /* ================= CHAT ROOM LISTENER + AUTO COMPLETE ================= */
   useEffect(() => {
     if (!roomId) return;
-
     const unsub = onSnapshot(doc(db, "chatRooms", roomId), async (snap) => {
       if (!snap.exists()) return;
-
       const data = snap.data();
       setRoomStatus(data.status);
-
-      // ⏱ AUTO COMPLETE AFTER 12 HOURS
       if (data.status !== "completed" && isAfter12Hours(data.createdAt)) {
         await updateDoc(doc(db, "chatRooms", roomId), {
           status: "completed",
@@ -98,25 +88,20 @@ export default function ChatRoom() {
         });
       }
     });
-
     return unsub;
   }, [roomId]);
 
-  /* ================= MESSAGES ================= */
   useEffect(() => {
     if (!roomId || !consultant?.id) return;
     setLoading(true);
-
     unsubRef.current = listenToMessages(roomId, (msgs) => {
       setMessages(msgs);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     });
-
     setLoading(false);
     return () => unsubRef.current?.();
   }, [roomId, consultant]);
 
-  /* ================= SEND MESSAGE ================= */
   const { sendTextMessage, sendFileMessage } = useSendMessage({
     roomId,
     senderId: consultant?.id,
@@ -128,8 +113,9 @@ export default function ChatRoom() {
 
   const handleSend = async () => {
     if (!text.trim() || isCompleted) return;
-    await sendTextMessage(text.trim());
+    const msg = text.trim();
     setText("");
+    await sendTextMessage(msg);
   };
 
   const handleFileSend = async () => {
@@ -138,7 +124,6 @@ export default function ChatRoom() {
     if (file) await sendFileMessage(file);
   };
 
-  /* ================= CONFIRM COMPLETE ================= */
   const confirmComplete = async () => {
     await updateDoc(doc(db, "chatRooms", roomId), {
       status: "completed",
@@ -147,239 +132,283 @@ export default function ChatRoom() {
     setConfirmVisible(false);
   };
 
-  /* ================= RENDER MESSAGE ================= */
   const renderMsg = ({ item }) => {
     const isMe = item.senderType === "consultant";
     return (
-      <TouchableOpacity
-        style={[
-          styles.message,
-          isMe ? styles.myMessage : styles.theirMessage,
-        ]}
-        onLongPress={() =>
-          isMe && !item.unsent && handleUnsendMessage(item, roomId)
-        }
-      >
-        <Text style={{ color: isMe ? "#fff" : "#000" }}>
-          {item.unsent ? "🚫 Message unsent" : item.text}
-        </Text>
-      </TouchableOpacity>
+      <View style={[styles.messageWrapper, isMe ? styles.myWrapper : styles.theirWrapper]}>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onLongPress={() => isMe && !item.unsent && handleUnsendMessage(item, roomId)}
+          style={[
+            styles.messageBubble,
+            isMe ? styles.myBubble : styles.theirBubble,
+            item.unsent && styles.unsentBubble,
+          ]}
+        >
+          <Text style={[styles.messageText, isMe ? styles.myText : styles.theirText, item.unsent && styles.unsentText]}>
+            {item.unsent ? "🚫 Message unsent" : item.text}
+          </Text>
+        </TouchableOpacity>
+      </View>
     );
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <View style={styles.container}>
-        {/* HEADER */}
-        <View style={styles.chatHeader}>
-          <View style={styles.avatar}>
+    <View style={styles.mainContainer}>
+      <StatusBar barStyle="dark-content" />
+      
+      {/* HEADER */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={28} color="#0F3E48" />
+        </TouchableOpacity>
+        
+        <View style={styles.headerProfile}>
+          <View style={styles.avatarContainer}>
             <Image
               source={
                 chatUser?.gender === "Female"
                   ? require("../../assets/office-woman.png")
                   : require("../../assets/office-man.png")
               }
-              style={styles.avatarImage}
+              style={styles.avatar}
             />
+            {chatUser?.isOnline && <View style={styles.onlineDot} />}
           </View>
           <View>
-            <Text style={styles.chatName}>{chatUser?.name || "Client"}</Text>
-            <Text style={styles.chatStatus}>
-              {chatUser?.isOnline
-                ? "Active now"
-                : formatLastSeen(chatUser?.lastSeen)}
+            <Text style={styles.nameText} numberOfLines={1}>{chatUser?.name || "Client"}</Text>
+            <Text style={styles.statusText}>
+              {chatUser?.isOnline ? "Active now" : formatLastSeen(chatUser?.lastSeen)}
             </Text>
           </View>
         </View>
 
-        {loading ? (
-          <ActivityIndicator />
-        ) : (
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            renderItem={renderMsg}
-            keyExtractor={(i) => i.id}
-            contentContainerStyle={{ paddingBottom: 180 }}
-          />
-        )}
-
-        {/* MARK AS COMPLETE */}
         {!isCompleted && (
-          <View style={styles.completeWrap}>
-            <TouchableOpacity
-              style={styles.completeBtn}
-              onPress={() => setConfirmVisible(true)}
-            >
-              <Text style={styles.completeText}>Mark as Complete</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity onPress={() => setConfirmVisible(true)} style={styles.checkBtn}>
+            <Ionicons name="checkmark-done-circle" size={28} color="#3FA796" />
+          </TouchableOpacity>
         )}
+      </View>
 
-        {/* INPUT */}
-        <View style={[styles.inputContainer, isCompleted && { opacity: 0.5 }]}>
-          <TouchableOpacity onPress={handleFileSend} disabled={isCompleted}>
-            <Text style={styles.attachText}>📎</Text>
+      {/* COMPLETED BANNER */}
+      {isCompleted && (
+        <View style={styles.completedBanner}>
+          <Ionicons name="lock-closed" size={14} color="#64748B" />
+          <Text style={styles.completedBannerText}>This consultation is marked as completed</Text>
+        </View>
+      )}
+
+      {loading ? (
+        <View style={styles.loader}>
+          <ActivityIndicator size="large" color="#01579B" />
+        </View>
+      ) : (
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMsg}
+          keyExtractor={(i) => i.id}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+
+      {/* INPUT AREA */}
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}>
+        <View style={[styles.inputWrapper, isCompleted && styles.disabledInput]}>
+          <TouchableOpacity 
+            onPress={handleFileSend} 
+            disabled={isCompleted} 
+            style={styles.attachmentBtn}
+          >
+            <Ionicons name="add-circle-outline" size={28} color={isCompleted ? "#CBD5E1" : "#01579B"} />
           </TouchableOpacity>
 
           <TextInput
-            style={styles.input}
+            style={styles.textInput}
             value={text}
             onChangeText={setText}
             editable={!isCompleted}
-            placeholder={
-              isCompleted ? "Chat is completed" : "Type a message..."
-            }
+            placeholder={isCompleted ? "Chat locked" : "Type a message..."}
+            placeholderTextColor="#94A3B8"
+            multiline
           />
 
           <TouchableOpacity
-            style={styles.sendBtn}
+            style={[styles.sendButton, (!text.trim() || isCompleted) && styles.sendDisabled]}
             onPress={handleSend}
-            disabled={isCompleted}
+            disabled={!text.trim() || isCompleted}
           >
-            <Text style={styles.sendText}>Send</Text>
+            <Ionicons name="send" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
-      </View>
+      </KeyboardAvoidingView>
 
       {/* CONFIRM MODAL */}
       <Modal transparent visible={confirmVisible} animationType="fade">
-        <View style={styles.modalBg}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>
-              Mark consultation as complete?
-            </Text>
-            <Text style={styles.modalDesc}>
-              You will no longer be able to chat after this.
-            </Text>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => setConfirmVisible(false)}
-              >
-                <Text>Cancel</Text>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconBox}>
+              <Ionicons name="checkmark-circle" size={40} color="#3FA796" />
+            </View>
+            <Text style={styles.modalTitle}>End Consultation?</Text>
+            <Text style={styles.modalSubtitle}>This will close the chat permanently. You won't be able to send more messages.</Text>
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setConfirmVisible(false)}>
+                <Text style={styles.cancelBtnText}>Keep Chatting</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.modalConfirm}
-                onPress={confirmComplete}
-              >
-                <Text style={{ color: "#fff" }}>Confirm</Text>
+              <TouchableOpacity style={styles.confirmBtn} onPress={confirmComplete}>
+                <Text style={styles.confirmBtnText}>Complete</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
-/* ================= STYLES ================= */
-
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 15, paddingTop: 40 },
-
-  chatHeader: {
+  mainContainer: { flex: 1, backgroundColor: "#F8FAFC" },
+  
+  header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingBottom: 10,
+    paddingTop: Platform.OS === "ios" ? 30 : 30,
+    paddingBottom: 15,
+    paddingHorizontal: 15,
+    backgroundColor: "#FFF",
     borderBottomWidth: 1,
-    borderColor: "#E4E6EB",
+    borderBottomColor: "#F1F5F9",
+    elevation: 2,
   },
+  backBtn: { padding: 5 },
+  headerProfile: { flex: 1, flexDirection: "row", alignItems: "center", marginLeft: 10 },
+  avatarContainer: { position: 'relative' },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#F1F5F9" },
+  onlineDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#22C55E',
+    borderWidth: 2,
+    borderColor: '#FFF'
+  },
+  nameText: { fontSize: 16, fontWeight: "800", color: "#0F3E48", width: 180 , left: 10,},
+  statusText: { fontSize: 12, color: "#64748B",left: 10, },
+  checkBtn: { padding: 5 },
 
-  avatar: {
+  completedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 8,
+    gap: 6
+  },
+  completedBannerText: { fontSize: 12, color: "#64748B", fontWeight: '600' },
+
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  listContent: { paddingHorizontal: 15, paddingVertical: 20, paddingBottom: 40 },
+
+  messageWrapper: { marginVertical: 4, flexDirection: 'row', width: '100%' },
+  myWrapper: { justifyContent: 'flex-end' },
+  theirWrapper: { justifyContent: 'flex-start' },
+
+  messageBubble: {
+    maxWidth: "80%",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  myBubble: {
+    backgroundColor: "#01579B",
+    borderBottomRightRadius: 4,
+  },
+  theirBubble: {
+    backgroundColor: "#FFF",
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  unsentBubble: { backgroundColor: "#F8FAFC", borderWidth: 1, borderColor: "#E2E8F0" },
+  
+  messageText: { fontSize: 15, lineHeight: 20 },
+  myText: { color: "#FFF" },
+  theirText: { color: "#1E293B" },
+  unsentText: { color: "#94A3B8", fontStyle: 'italic' },
+
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    backgroundColor: "#FFF",
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+  },
+  disabledInput: { backgroundColor: "#F8FAFC" },
+  attachmentBtn: { marginRight: 10 },
+  textInput: {
+    flex: 1,
+    backgroundColor: "#F1F5F9",
+    borderRadius: 25,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    paddingTop: 8,
+    maxHeight: 100,
+    fontSize: 15,
+    color: "#1E293B",
+  },
+  sendButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    overflow: "hidden",
-    backgroundColor: "#E4E6EB",
-    marginRight: 10,
-  },
-  avatarImage: { width: "100%", height: "100%" },
-
-  chatName: { fontSize: 16, fontWeight: "700" },
-  chatStatus: { fontSize: 12, color: "#777" },
-
-  message: {
-    padding: 10,
-    marginVertical: 6,
-    maxWidth: "75%",
-    borderRadius: 16,
-  },
-  myMessage: { alignSelf: "flex-end", backgroundColor: "#0084FF" },
-  theirMessage: { alignSelf: "flex-start", backgroundColor: "#E4E6EB" },
-
-  completeWrap: {
-    position: "absolute",
-    bottom: 60,
-    left: 15,
-  },
-  completeBtn: {
-    borderWidth: 1,
-    borderColor: "#008000",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  completeText: { color: "#008000", fontWeight: "700" },
-
-  inputContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 10,
-    backgroundColor: "#F0F2F5",
-  },
-  attachText: { fontSize: 22, marginRight: 10 },
-  input: {
-    flex: 1,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    backgroundColor: "#fff",
-    borderRadius: 20,
-  },
-  sendBtn: {
-    marginLeft: 10,
-    backgroundColor: "#0084FF",
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 20,
-  },
-  sendText: { color: "#fff", fontWeight: "700" },
-
-  modalBg: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "#01579B",
     justifyContent: "center",
     alignItems: "center",
+    marginLeft: 10,
   },
-  modalBox: {
-    backgroundColor: "#fff",
-    padding: 20,
-    width: "80%",
-    borderRadius: 12,
-  },
-  modalTitle: { fontSize: 16, fontWeight: "700" },
-  modalDesc: { marginTop: 6, color: "#555" },
+  sendDisabled: { backgroundColor: "#CBD5E1" },
 
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: 20,
-    gap: 10,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 62, 72, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 30,
   },
-  modalCancel: { padding: 8 },
-  modalConfirm: {
-    backgroundColor: "#008000",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 6,
+  modalContent: {
+    backgroundColor: "#FFF",
+    borderRadius: 30,
+    padding: 25,
+    width: "100%",
+    alignItems: 'center'
   },
+  modalIconBox: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#F0FDFA",
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20
+  },
+  modalTitle: { fontSize: 20, fontWeight: "900", color: "#0F3E48", marginBottom: 10 },
+  modalSubtitle: { fontSize: 14, color: "#64748B", textAlign: 'center', lineHeight: 20, marginBottom: 25 },
+  modalButtons: { flexDirection: 'row', gap: 12 },
+  cancelBtn: { flex: 1, paddingVertical: 15, alignItems: 'center' },
+  cancelBtnText: { color: "#64748B", fontWeight: "700" },
+  confirmBtn: {
+    flex: 2,
+    backgroundColor: "#3FA796",
+    paddingVertical: 15,
+    borderRadius: 15,
+    alignItems: 'center',
+  },
+  confirmBtnText: { color: "#FFF", fontWeight: "800" },
 });

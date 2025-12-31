@@ -6,6 +6,10 @@ import {
   ActivityIndicator,
   Alert,
   TouchableOpacity,
+  StatusBar,
+  SafeAreaView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -31,7 +35,6 @@ export default function ConsultantChangePassword() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  /* ================= CHANGE PASSWORD ================= */
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       Alert.alert("Validation", "Please fill in all fields.");
@@ -50,16 +53,10 @@ export default function ConsultantChangePassword() {
 
     try {
       setLoading(true);
-
-      const credential = EmailAuthProvider.credential(
-        user.email,
-        currentPassword
-      );
-
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
       await reauthenticateWithCredential(user, credential);
       await updatePassword(user, newPassword);
 
-      // ✅ AUTO LOGOUT AFTER PASSWORD CHANGE
       await signOut(auth);
       await AsyncStorage.multiRemove([
         "aestheticai:current-user-id",
@@ -69,23 +66,14 @@ export default function ConsultantChangePassword() {
       Alert.alert(
         "Password Updated ✅",
         "Please login again using your new password.",
-        [
-          {
-            text: "OK",
-            onPress: () => router.replace("/Login"),
-          },
-        ]
+        [{ text: "OK", onPress: () => router.replace("/Login") }]
       );
     } catch (error) {
       console.log("Change password error:", error);
-
       if (error.code === "auth/wrong-password") {
         Alert.alert("Error", "Current password is incorrect.");
       } else if (error.code === "auth/too-many-requests") {
-        Alert.alert(
-          "Too Many Attempts",
-          "Please try again later."
-        );
+        Alert.alert("Too Many Attempts", "Please try again later.");
       } else {
         Alert.alert("Error", "Failed to update password.");
       }
@@ -94,128 +82,158 @@ export default function ConsultantChangePassword() {
     }
   };
 
-  /* ================= UI ================= */
   return (
     <View style={styles.container}>
-      {/* HEADER */}
-      <View style={styles.headerRow}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={router.back}
-        >
-          <Ionicons name="arrow-back" size={22} color="#0F3E48" />
-        </TouchableOpacity>
+      <StatusBar barStyle="dark-content" />
+      <SafeAreaView style={{ backgroundColor: "#FFF" }}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity style={styles.backButton} onPress={router.back}>
+            <Ionicons name="arrow-back" size={24} color="#1E293B" />
+          </TouchableOpacity>
+          <View>
+            <Text style={styles.headerTitle}>Change Password</Text>
+            <Text style={styles.headerSubtitle}>Secure your consultant account</Text>
+          </View>
+        </View>
+        <View style={styles.headerDivider} />
+      </SafeAreaView>
 
-        <View>
-          <Text style={styles.headerTitle}>Change Password</Text>
-          <Text style={styles.headerSubtitle}>
-            Secure your consultant account
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"} 
+        style={styles.content}
+      >
+        <View style={styles.infoBox}>
+          <Ionicons name="shield-checkmark" size={20} color="#0D9488" />
+          <Text style={styles.infoText}>
+            Updating your password will log you out from all devices for security.
           </Text>
         </View>
-      </View>
 
-      <View style={styles.divider} />
+        <View style={styles.card}>
+          <Input
+            label="Current Password"
+            placeholder="Enter current password"
+            secureTextEntry
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
+            icon={<Ionicons name="lock-closed" size={18} color="#94A3B8" />}
+          />
 
-      {/* FORM */}
-      <View style={styles.card}>
-        <Input
-          label="Current Password"
-          placeholder="Enter current password"
-          secureTextEntry
-          value={currentPassword}
-          onChangeText={setCurrentPassword}
-          icon={<Ionicons name="lock-closed-outline" size={18} color="#9CA3AF" />}
-        />
+          <View style={styles.inputDivider} />
 
-        <Input
-          label="New Password"
-          placeholder="Enter new password"
-          secureTextEntry
-          value={newPassword}
-          onChangeText={setNewPassword}
-          icon={<Ionicons name="key-outline" size={18} color="#9CA3AF" />}
-        />
+          <Input
+            label="New Password"
+            placeholder="Enter new password"
+            secureTextEntry
+            value={newPassword}
+            onChangeText={setNewPassword}
+            icon={<Ionicons name="key" size={18} color="#94A3B8" />}
+          />
 
-        <Input
-          label="Confirm New Password"
-          placeholder="Confirm new password"
-          secureTextEntry
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          icon={
-            <Ionicons
-              name="shield-checkmark-outline"
-              size={18}
-              color="#9CA3AF"
-            />
-          }
-        />
-      </View>
+          <Input
+            label="Confirm New Password"
+            placeholder="Confirm new password"
+            secureTextEntry
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            icon={<Ionicons name="checkmark-circle" size={18} color="#94A3B8" />}
+          />
+        </View>
 
-      {/* SAVE BUTTON */}
-      <Button
-        title={loading ? "Updating..." : "Update Password"}
-        onPress={handleChangePassword}
-        disabled={loading}
-        backgroundColor="#3FA796"
-        textColor="#fff"
-        icon={
-          loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Ionicons name="save-outline" size={20} color="#fff" />
-          )
-        }
-      />
+        <View style={styles.buttonContainer}>
+          <Button
+            title={loading ? "Processing..." : "Update Password"}
+            onPress={handleChangePassword}
+            disabled={loading}
+            backgroundColor="#0F3E48"
+            textColor="#fff"
+            style={styles.submitBtn}
+          />
+        </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
-/* ================= STYLES ================= */
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F3F9FA",
-    padding: 16,
+    backgroundColor: "#F8FAFC",
   },
-
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 30,
-    paddingBottom: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 30,
+    backgroundColor: "#FFF",
   },
   backButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#E3F2FD",
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#F1F5F9",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 16,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "900",
     color: "#0F3E48",
   },
   headerSubtitle: {
-    fontSize: 12,
-    color: "#777",
+    fontSize: 13,
+    color: "#64748B",
     marginTop: 2,
   },
-  divider: {
+  headerDivider: {
     height: 1,
-    backgroundColor: "#E4E6EB",
-    marginBottom: 16,
+    backgroundColor: "#F1F5F9",
+  },
+  content: {
+    flex: 1,
+    padding: 20,
+  },
+  infoBox: {
+    flexDirection: "row",
+    backgroundColor: "#F0FDFA",
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#CCFBF1",
+    marginBottom: 20,
+    alignItems: "center",
+  },
+  infoText: {
+    fontSize: 12,
+    color: "#0D9488",
+    marginLeft: 10,
+    flex: 1,
+    fontWeight: "500",
+    lineHeight: 18,
   },
   card: {
     backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 25,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  inputDivider: {
+    height: 1,
+    backgroundColor: "#F1F5F9",
+    marginVertical: 10,
+  },
+  buttonContainer: {
+    marginTop: "auto",
+    paddingBottom: 20,
+  },
+  submitBtn: {
     borderRadius: 16,
-    padding: 18,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: "#E1E8EA",
+    height: 56,
   },
 });

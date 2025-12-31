@@ -1,4 +1,3 @@
-// app/user/AIDesigner.jsx
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -10,7 +9,9 @@ import {
   TouchableOpacity,
   View,
   Image,
+  StatusBar,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import useSubscriptionType from "../../services/useSubscriptionType";
 import BottomNavbar from "../components/BottomNav";
 
@@ -18,29 +19,13 @@ export default function AIDesigner() {
   const router = useRouter();
   const subType = useSubscriptionType();
 
-  // ✅ Mock chat summaries (STATIC – no UI jump)
   const [chatSummaries] = useState({
     design: [
-      {
-        id: "1",
-        title: "Living Room Design",
-        lastMessage: "Great! I suggest neutral colors...",
-        date: "2025-11-17",
-      },
-      {
-        id: "2",
-        title: "Workspace Redesign",
-        lastMessage: "Consider adding a small desk...",
-        date: "2025-11-15",
-      },
+      { id: "1", title: "Living Room Design", lastMessage: "Great! I suggest neutral colors...", date: "Nov 17" },
+      { id: "2", title: "Workspace Redesign", lastMessage: "Consider adding a small desk...", date: "Nov 15" },
     ],
     customize: [
-      {
-        id: "1",
-        title: "Bedroom Layout",
-        lastMessage: "Try moving the bed to the corner...",
-        date: "2025-11-16",
-      },
+      { id: "1", title: "Bedroom Layout", lastMessage: "Try moving the bed to the corner...", date: "Nov 16" },
     ],
   });
 
@@ -52,7 +37,6 @@ export default function AIDesigner() {
     router.push(`/User/AIDesignerChat?tab=${tab}&chatId=${chatId}`);
   };
 
-  // ✅ flattened history ONCE (prevents rerender reflow)
   const historyList = [
     ...chatSummaries.design.map((c) => ({ ...c, tab: "design" })),
     ...chatSummaries.customize.map((c) => ({ ...c, tab: "customize" })),
@@ -60,230 +44,172 @@ export default function AIDesigner() {
 
   return (
     <View style={styles.page}>
-      <KeyboardAvoidingView
-        style={styles.keyboardWrap}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={90}
+      <StatusBar barStyle="dark-content" />
+      
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>AI Interior Hub</Text>
+        <Text style={styles.headerSubtitle}>Personalized design at your fingertips</Text>
+      </View>
+
+      <ScrollView 
+        style={styles.container} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
       >
-        {/* ===== CONTENT ===== */}
-        <View style={styles.container}>
-          {/* ===== TOP CARDS (FIXED HEIGHT) ===== */}
-          <View style={styles.cardsContainer}>
-            <TouchableOpacity
-              onPress={() => openChatScreen("design")}
-              style={styles.cardTeal}
-              activeOpacity={0.85}
-            >
-              <View style={styles.cardContent}>
-                <Image
-                  source={require("../../assets/design.png")}
-                  style={styles.cardIcon}
-                />
-                <Text style={styles.cardText}>Design with AI</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => openChatScreen("customize")}
-              style={styles.cardPink}
-              activeOpacity={0.85}
-            >
-              <View style={styles.cardContent}>
-                <Image
-                  source={require("../../assets/customize.png")}
-                  style={styles.cardIcon}
-                />
-                <Text style={styles.cardText}>Customize with AI</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          {/* ===== HISTORY TITLE (FIXED SPACE) ===== */}
-          <View style={styles.historyTitleWrap}>
-            <Text style={styles.historyTitle}>Recent Conversations</Text>
-          </View>
-
-          {/* ===== HISTORY LIST (NO LAYOUT SHIFT) ===== */}
-          <ScrollView
-            style={styles.historyContainer}
-            contentContainerStyle={styles.historyContent}
-            showsVerticalScrollIndicator={false}
+        {/* ===== AI TOOLS SECTION ===== */}
+        <Text style={styles.sectionLabel}>Start a New Project</Text>
+        <View style={styles.cardsContainer}>
+          <TouchableOpacity
+            onPress={() => openChatScreen("design")}
+            style={[styles.mainCard, { backgroundColor: "#0F3E48" }]}
+            activeOpacity={0.9}
           >
-            {historyList.map((chat) => (
-              <TouchableOpacity
-                key={`${chat.tab}-${chat.id}`}
-                style={styles.historyItem}
-                activeOpacity={0.7}
-                onPress={() => openChatHistory(chat.tab, chat.id)}
-              >
-                <View style={styles.historyHeader}>
-                  <View style={styles.historyAccent} />
-                  <Text style={styles.historyItemTitle}>
-                    {chat.title}
-                  </Text>
-                </View>
+            <View style={styles.cardIconCircle}>
+              <Image source={require("../../assets/design.png")} style={styles.cardIcon} />
+            </View>
+            <Text style={styles.cardTitle}>Full Room Design</Text>
+            <Text style={styles.cardDesc}>Create a new room concept from scratch.</Text>
+            <Ionicons name="arrow-forward-circle" size={24} color="#3FA796" style={styles.cardArrow} />
+          </TouchableOpacity>
 
-                <Text
-                  style={styles.historyItemSnippet}
-                  numberOfLines={2}
-                >
+          <TouchableOpacity
+            onPress={() => openChatScreen("customize")}
+            style={[styles.mainCard, { backgroundColor: "#FFF", borderWidth: 1, borderColor: "#E2E8F0" }]}
+            activeOpacity={0.9}
+          >
+            <View style={[styles.cardIconCircle, { backgroundColor: "#FDF2F8" }]}>
+              <Image source={require("../../assets/customize.png")} style={styles.cardIcon} />
+            </View>
+            <Text style={[styles.cardTitle, { color: "#1E293B" }]}>Customize Space</Text>
+            <Text style={styles.cardDescLight}>Adjust layouts, colors, and furniture.</Text>
+            <Ionicons name="arrow-forward-circle" size={24} color="#DB2777" style={styles.cardArrow} />
+          </TouchableOpacity>
+        </View>
+
+        {/* ===== HISTORY SECTION ===== */}
+        <View style={styles.historyHeaderRow}>
+          <Text style={styles.historyTitle}>Recent Chats</Text>
+          <TouchableOpacity>
+            <Text style={styles.seeAllText}>View All</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.historyList}>
+          {historyList.map((chat) => (
+            <TouchableOpacity
+              key={`${chat.tab}-${chat.id}`}
+              style={styles.historyItem}
+              onPress={() => openChatHistory(chat.tab, chat.id)}
+            >
+              <View style={[styles.historyIconBox, { backgroundColor: chat.tab === 'design' ? '#E0F2FE' : '#FCE7F3' }]}>
+                <Ionicons 
+                  name={chat.tab === 'design' ? "color-wand" : "brush"} 
+                  size={20} 
+                  color={chat.tab === 'design' ? "#0284C7" : "#DB2777"} 
+                />
+              </View>
+              
+              <View style={styles.historyTextContent}>
+                <View style={styles.historyTopLine}>
+                  <Text style={styles.historyItemTitle} numberOfLines={1}>{chat.title}</Text>
+                  <Text style={styles.historyItemDate}>{chat.date}</Text>
+                </View>
+                <Text style={styles.historyItemSnippet} numberOfLines={1}>
                   {chat.lastMessage}
                 </Text>
-
-                <Text style={styles.historyItemDate}>
-                  {chat.date}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+              </View>
+            </TouchableOpacity>
+          ))}
         </View>
-      </KeyboardAvoidingView>
+      </ScrollView>
 
-      {/* ===== BOTTOM NAV (FIXED POSITION) ===== */}
       <BottomNavbar subType={subType} />
     </View>
   );
 }
 
-/* ================= STYLES ================= */
-
 const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: "#F3F9FA",
+  page: { flex: 1, backgroundColor: "#F8FAFC" },
+  
+  header: {
+    paddingTop: 60,
+    paddingHorizontal: 25,
+    paddingBottom: 20,
+    backgroundColor: "#FFF",
+  },
+  headerTitle: { fontSize: 26, fontWeight: "900", color: "#0F3E48" },
+  headerSubtitle: { fontSize: 14, color: "#64748B", marginTop: 4 },
+
+  container: { flex: 1 },
+  scrollContent: { paddingHorizontal: 25, paddingBottom: 100 },
+
+  sectionLabel: { 
+    fontSize: 12, 
+    fontWeight: "800", 
+    color: "#94A3B8", 
+    textTransform: "uppercase", 
+    letterSpacing: 1,
+    marginTop: 25,
+    marginBottom: 15
   },
 
-  keyboardWrap: {
+  cardsContainer: { flexDirection: "row", gap: 15 },
+  mainCard: {
     flex: 1,
-  },
-
-  container: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 50,
-  },
-
-  /* ===== TOP CARDS ===== */
-  cardsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 30,
-    minHeight: 120, // ✅ prevents jump
-  },
-
-  cardTeal: {
-    flex: 1,
-    height: 120,
-    borderRadius: 20,
-    backgroundColor: "#e0f7fa",
+    padding: 20,
+    borderRadius: 24,
+    height: 200,
     elevation: 4,
     shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    marginHorizontal: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    justifyContent: 'space-between'
   },
-
-  cardPink: {
-    flex: 1,
-    height: 120,
-    borderRadius: 20,
-    backgroundColor: "#fce4ec",
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    marginHorizontal: 4,
+  cardIconCircle: {
+    width: 45,
+    height: 45,
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    justifyContent: 'center',
+    alignItems: 'center'
   },
+  cardIcon: { width: 28, height: 28, resizeMode: 'contain' },
+  cardTitle: { fontSize: 16, fontWeight: "800", color: "#FFF", marginTop: 10 },
+  cardDesc: { fontSize: 11, color: "#94A3B8", lineHeight: 16 },
+  cardDescLight: { fontSize: 11, color: "#64748B", lineHeight: 16 },
+  cardArrow: { alignSelf: 'flex-end' },
 
-  cardContent: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+  historyHeaderRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    marginTop: 35,
+    marginBottom: 15
   },
+  historyTitle: { fontSize: 18, fontWeight: "800", color: "#1E293B" },
+  seeAllText: { fontSize: 13, color: "#3FA796", fontWeight: "700" },
 
-  cardIcon: {
-    width: 48,
-    height: 48,
-    resizeMode: "contain",
-    marginBottom: 10,
-  },
-
-  cardText: {
-    fontWeight: "600",
-    color: "#0F3E48",
-    fontSize: 14,
-    textAlign: "center",
-    letterSpacing: 0.5,
-  },
-
-  /* ===== HISTORY ===== */
-  historyTitleWrap: {
-    minHeight: 34, // ✅ fixed space
-    justifyContent: "center",
-    marginBottom: 18,
-  },
-
-  historyTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#912f56",
-    marginLeft: 4,
-  },
-
-  historyContainer: {
-    flex: 1,
-  },
-
-  historyContent: {
-    paddingBottom: 120, // ✅ safe scroll space (navbar)
-  },
-
+  historyList: { gap: 12 },
   historyItem: {
-    backgroundColor: "#faf9f6",
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 14,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-    minHeight: 88, // ✅ prevents height change
+    flexDirection: 'row',
+    backgroundColor: "#FFF",
+    padding: 15,
+    borderRadius: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: "#F1F5F9"
   },
-
-  historyHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 6,
+  historyIconBox: {
+    width: 45,
+    height: 45,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15
   },
-
-  historyAccent: {
-    width: 6,
-    height: 20,
-    backgroundColor: "#912f56",
-    borderRadius: 3,
-    marginRight: 8,
-  },
-
-  historyItemTitle: {
-    fontWeight: "700",
-    color: "#0F3E48",
-    fontSize: 16,
-    flexShrink: 1,
-  },
-
-  historyItemSnippet: {
-    color: "#4A6B70",
-    fontSize: 13,
-    marginTop: 2,
-  },
-
-  historyItemDate: {
-    color: "#888",
-    fontSize: 12,
-    marginTop: 6,
-    textAlign: "right",
-  },
+  historyTextContent: { flex: 1 },
+  historyTopLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  historyItemTitle: { fontSize: 15, fontWeight: "700", color: "#0F3E48", flex: 1 },
+  historyItemDate: { fontSize: 11, color: "#94A3B8", fontWeight: "600" },
+  historyItemSnippet: { fontSize: 13, color: "#64748B" },
 });

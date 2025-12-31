@@ -19,6 +19,8 @@ import {
   Text,
   TouchableOpacity,
   View,
+  StatusBar,
+  SafeAreaView
 } from "react-native";
 import { db } from "../../config/firebase";
 import BottomNavbar from "../components/BottomNav";
@@ -72,20 +74,16 @@ export default function Homepage() {
 
             if (data.userId) {
               try {
-                const userDoc = await getDoc(
-                  doc(db, "users", data.userId)
-                );
+                const userDoc = await getDoc(doc(db, "users", data.userId));
                 if (userDoc.exists()) {
                   const u = userDoc.data();
                   userName = u.fullName || u.name || "Unnamed User";
                 }
               } catch {}
             }
-
             return { id: docSnap.id, ...data, userName };
           })
         );
-
         setRecentRequests(requests);
         setLoading(false);
       }
@@ -111,250 +109,154 @@ export default function Homepage() {
     };
   }, [consultant]);
 
-  /* ================= RENDER ================= */
-  if (!consultant || loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#0D47A1" />
-        <Text>Loading your dashboard...</Text>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
-      {/* GREETING */}
-      <View style={styles.welcomeRow}>
-        <Text style={styles.header}>Hi, {consultant.fullName}</Text>
-
-      </View>
-
-      <Text style={styles.subtext}>
-        {consultant.consultantType} – {consultant.specialization}
-      </Text>
-
-      {/* CURRENT BALANCE */}
-      <View style={styles.balanceCard}>
-        <View>
-          <Text style={styles.balanceLabel}>Current Balance</Text>
-          <Text style={styles.balanceAmount}>
-            ₱ {balance.toFixed(2)}
-          </Text>
+      <StatusBar barStyle="dark-content" />
+      
+      <SafeAreaView style={styles.headerArea}>
+        {/* GREETING SECTION */}
+        <View style={styles.welcomeRow}>
+          <View>
+            <Text style={styles.header}>
+              Hi, {consultant?.fullName || "Consultant"}
+            </Text>
+            <Text style={styles.subtext}>
+              {consultant?.consultantType || "Professional"} • {consultant?.specialization || "Expert"}
+            </Text>
+          </View>
+          <View style={styles.profileCircle}>
+             <Text style={styles.profileLetter}>{consultant?.fullName?.charAt(0) || "C"}</Text>
+          </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.withdrawBtn}
-          onPress={() => router.push("/Consultant/EarningsScreen")}
-        >
-          <Text style={styles.withdrawText}>Withdraw</Text>
-        </TouchableOpacity>
-      </View>
+        {/* CURRENT BALANCE CARD */}
+        <View style={styles.balanceCard}>
+          <View>
+            <Text style={styles.balanceLabel}>Current Balance</Text>
+            <Text style={styles.balanceAmount}>
+              ₱ {balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </Text>
+          </View>
 
-      <View style={styles.quickActions}>
-  <TouchableOpacity
-    style={[styles.actionCard, styles.actionCardTeal]}
-    onPress={() => router.push("/Consultant/EditProfile")}
-  >
-    <Image
-      source={require("../../assets/edit.png")}
-      style={styles.actionIcon}
-    />
-    <Text style={styles.actionText}>Edit Profile</Text>
-  </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.withdrawBtn}
+            onPress={() => router.push("/Consultant/EarningsScreen")}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.withdrawText}>Withdraw</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
 
-  <TouchableOpacity
-    style={[styles.actionCard, styles.actionCardPurple]}
-    onPress={() => router.push("/Consultant/EditAvailability")}
-  >
-    <Image
-      source={require("../../assets/schedule.png")}
-      style={styles.actionIcon}
-    />
-    <Text style={styles.actionText}>Manage Availability</Text>
-  </TouchableOpacity>
-</View>
+      <FlatList
+        data={loading ? [] : recentRequests}
+        keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        ListHeaderComponent={
+          <>
+            {/* QUICK ACTIONS */}
+            <View style={styles.quickActions}>
+              <TouchableOpacity
+                style={[styles.actionCard, styles.actionCardTeal]}
+                onPress={() => router.push("/Consultant/EditProfile")}
+              >
+                <Image source={require("../../assets/edit.png")} style={styles.actionIcon} />
+                <Text style={styles.actionText}>Edit Profile</Text>
+              </TouchableOpacity>
 
+              <TouchableOpacity
+                style={[styles.actionCard, styles.actionCardPurple]}
+                onPress={() => router.push("/Consultant/EditAvailability")}
+              >
+                <Image source={require("../../assets/schedule.png")} style={styles.actionIcon} />
+                <Text style={styles.actionText}>Availability</Text>
+              </TouchableOpacity>
+            </View>
 
-      {/* RECENT APPOINTMENTS */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Recent Appointments</Text>
-        <TouchableOpacity
-          onPress={() => router.push("/Consultant/Requests")}
-        >
-          <Text style={styles.viewAllText}>View All</Text>
-        </TouchableOpacity>
-      </View>
-
-      {recentRequests.length === 0 ? (
-        <Text style={styles.placeholderText}>
-          No recent appointments
-        </Text>
-      ) : (
-        <FlatList
-          data={recentRequests}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <View style={styles.requestItem}>
+            {/* RECENT APPOINTMENTS HEADER */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Recent Appointments</Text>
+              <TouchableOpacity onPress={() => router.push("/Consultant/Requests")}>
+                <Text style={styles.viewAllText}>View All</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {loading && (
+              <View style={styles.listLoader}>
+                <ActivityIndicator color="#01579B" />
+              </View>
+            )}
+          </>
+        }
+        renderItem={({ item }) => (
+          <View style={styles.requestItem}>
+            <View style={styles.requestInfo}>
               <Text style={styles.requestName}>{item.userName}</Text>
               <View style={styles.requestMeta}>
                 <Text style={styles.requestTime}>
-                  {item.appointmentAt?.toDate().toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  {item.appointmentAt?.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </Text>
+                <Text style={styles.dot}>•</Text>
                 <Text style={styles.requestDate}>
                   {item.appointmentAt?.toDate().toLocaleDateString()}
                 </Text>
               </View>
             </View>
-          )}
-        />
-      )}
+            <View style={styles.statusDot} />
+          </View>
+        )}
+        ListEmptyComponent={
+          !loading && (
+            <View style={styles.emptyContainer}>
+               <Text style={styles.placeholderText}>No recent appointments</Text>
+            </View>
+          )
+        }
+      />
 
       <BottomNavbar role="consultant" />
     </View>
   );
 }
 
-/* ================= STYLES ================= */
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F3F9FA",
-    paddingHorizontal: 20,
-    paddingTop: 50,
-  },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
+  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  headerArea: { paddingHorizontal: 20, paddingTop: 40, backgroundColor: '#FFF', borderBottomLeftRadius: 30, borderBottomRightRadius: 30, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10 },
+  welcomeRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 15 },
+  header: { fontSize: 22, fontWeight: "800", color: "#1E293B" },
+  subtext: { fontSize: 13, color: "#64748B", marginTop: 2 },
+  profileCircle: { width: 45, height: 45, borderRadius: 23, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
+  profileLetter: { fontSize: 18, fontWeight: '700', color: '#01579B' },
+  
+  balanceCard: { flexDirection: "row", justifyContent: "space-between", alignItems: 'center', padding: 22, borderRadius: 24, backgroundColor: "#01579B", marginBottom: 25, elevation: 8, shadowColor: '#01579B', shadowOpacity: 0.3, shadowRadius: 12, marginTop: 10, },
+  balanceLabel: { fontSize: 13, color: "rgba(255,255,255,0.7)", fontWeight: '600' },
+  balanceAmount: { fontSize: 26, fontWeight: "900", color: "#FFF", marginTop: 4 },
+  withdrawBtn: { backgroundColor: "#3fa796", paddingHorizontal: 16, height: 36, borderRadius: 12, justifyContent: "center", alignItems: "center" },
+  withdrawText: { color: "#fff", fontWeight: "700", fontSize: 13 },
 
-  welcomeRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  header: { fontSize: 20, fontWeight: "800", color: "#912f56" },
-  editButton: { padding: 6 },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 120 },
+  quickActions: { flexDirection: "row", justifyContent: "space-between", marginBottom: 25 },
+  actionCard: { flex: 1, marginHorizontal: 6, height: 95, borderRadius: 20, justifyContent: "center", alignItems: "center", elevation: 2, shadowColor: '#000', shadowOpacity: 0.05 },
+  actionCardTeal: { backgroundColor: "#E0F7FA" },
+  actionCardPurple: { backgroundColor: "#F3E5F5" },
+  actionIcon: { width: 32, height: 32, marginBottom: 8, resizeMode: "contain" },
+  actionText: { fontWeight: "800", fontSize: 12, color: "#334155" },
 
-  subtext: {
-    fontSize: 15,
-    color: "#607D8B",
-    marginBottom: 22,
-    fontStyle: "italic",
-  },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: 'center', marginBottom: 15 },
+  sectionTitle: { fontSize: 17, fontWeight: "800", color: "#1E293B" },
+  viewAllText: { fontSize: 13, fontWeight: "700", color: "#01579B" },
 
-  balanceCard: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: 22,
-    borderRadius: 20,
-    backgroundColor: "#01579B",
-    marginBottom: 18,
-  },
-  balanceLabel: { fontSize: 15, color: "#BBDEFB" },
-  balanceAmount: { fontSize: 28, fontWeight: "900", color: "#FFF" },
+  requestItem: { backgroundColor: "#FFF", padding: 18, borderRadius: 20, marginBottom: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 2, shadowColor: '#000', shadowOpacity: 0.03 },
+  requestInfo: { flex: 1 },
+  requestName: { fontSize: 16, fontWeight: "700", color: "#1E293B", marginBottom: 4 },
+  requestMeta: { flexDirection: "row", alignItems: "center" },
+  requestTime: { fontSize: 12, color: "#64748B" },
+  requestDate: { fontSize: 12, color: "#64748B" },
+  dot: { marginHorizontal: 6, color: '#CBD5E1' },
+  statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#912f56' },
 
-  withdrawBtn: {
-    backgroundColor: "#3fa796",
-    paddingHorizontal: 15,
-    marginTop: 12,
-    height: 34,              // ✅ ITO ANG GAME CHANGER
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  
-  withdrawText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 14,            // ⬇️ maliit pero readable
-    lineHeight: 14,          // ✅ para di humila ng height
-  },
-  
-  
-
-  quickActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginHorizontal: 6,     // ⬇️ from 10
-    marginTop: 2,            // ⬇️ from 4
-    marginBottom: 20,        // ⬇️ from 24
-  },
-  
-  actionCard: {
-    flex: 1,
-    margin: 6,
-    height: 90,              // ⬇️ from 110 ✅
-    borderRadius: 14,        // ⬇️ from 16
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 2,
-  },
-  
-  
-  actionCardTeal: {
-    backgroundColor: "#e0f7fa",
-  },
-  
-  actionCardPurple: {
-    backgroundColor: "#ede7f6",
-  },
-  
-  actionText: {
-    fontWeight: "900",
-    fontSize: 12,
-    marginTop: 6,
-    color: "#2c4f4f",
-  },
-
-  
-  actionIcon: {
-    width: 36,
-    height: 36,
-    marginBottom: 6,
-    resizeMode: "contain",
-  },
-  
-
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#912f56",
-  },
-  viewAllText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#01579B",
-  },
-
-  placeholderText: {
-    textAlign: "center",
-    color: "#90A4AE",
-    fontStyle: "italic",
-  },
-
-  requestItem: {
-    backgroundColor: "#FFF",
-    padding: 18,
-    borderRadius: 18,
-    marginBottom: 14,
-    borderLeftWidth: 4,
-    borderLeftColor: "#912f56",
-  },
-  requestName: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#01579B",
-    marginBottom: 6,
-  },
-  requestMeta: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  requestTime: { fontSize: 13, color: "#455A64" },
-  requestDate: { fontSize: 13, color: "#455A64" },
+  listLoader: { padding: 20 },
+  emptyContainer: { alignItems: 'center', marginTop: 20 },
+  placeholderText: { textAlign: "center", color: "#94A3B8", fontSize: 14 },
 });
