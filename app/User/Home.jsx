@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   doc,
@@ -10,7 +11,7 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Dimensions,
@@ -33,50 +34,9 @@ export default function Home() {
   const router = useRouter();
   const [profile, setProfile] = useState(null);
   const [rooms, setRooms] = useState([]);
-  const [carouselIndex, setCarouselIndex] = useState(0);
   const [nextConsultation, setNextConsultation] = useState(null);
   const subType = useSubscriptionType();
   const scrollRef = useRef(null);
-
-  /* ================= LOAD PROFILE ================= */
-  const loadProfile = async () => {
-    try {
-      if (!auth.currentUser) return;
-      const uid = auth.currentUser.uid;
-      const snap = await getDoc(doc(db, "users", uid));
-      if (!snap.exists()) return;
-
-      const data = snap.data();
-      setProfile(data);
-      await AsyncStorage.setItem(
-        `${PROFILE_KEY_PREFIX}${uid}`,
-        JSON.stringify(data)
-      );
-    } catch (err) {
-      console.log("Profile Load Error:", err);
-    }
-  };
-
-  /* ================= MOCK PROJECTS ================= */
-  const fetchRooms = () => {
-    setRooms([
-      {
-        id: "1",
-        name: "Living Room",
-        image: require("../../assets/livingroom.jpg"),
-      },
-      {
-        id: "2",
-        name: "Bedroom",
-        image: require("../../assets/carousel2.jpg"),
-      },
-      {
-        id: "3",
-        name: "Workspace",
-        image: require("../../assets/carousel3.png"),
-      },
-    ]);
-  };
 
   /* ================= CONSULTATION PREVIEW ================= */
   useEffect(() => {
@@ -116,8 +76,58 @@ export default function Home() {
   const goToProjects = () => router.push("/User/Projects");
 
   useEffect(() => {
-    loadProfile();
+    /* ================= MOCK PROJECTS ================= */
+    const fetchRooms = () => {
+      setRooms([
+        {
+          id: "1",
+          name: "Living Room",
+          image: require("../../assets/livingroom.jpg"),
+        },
+        {
+          id: "2",
+          name: "Bedroom",
+          image: require("../../assets/carousel2.jpg"),
+        },
+        {
+          id: "3",
+          name: "Workspace",
+          image: require("../../assets/carousel3.png"),
+        },
+      ]);
+    };
+
+    /* ================= LOAD PROFILE ================= */
+    const loadProfile = async (user) => {
+      try {
+        const currentUser = user || auth.currentUser;
+        if (!currentUser) return;
+        const uid = currentUser.uid;
+
+        const snap = await getDoc(doc(db, "users", uid));
+        if (!snap.exists()) return;
+
+        const data = snap.data();
+        setProfile(data);
+        await AsyncStorage.setItem(
+          `${PROFILE_KEY_PREFIX}${uid}`,
+          JSON.stringify(data)
+        );
+      } catch (err) {
+        console.log("Profile Load Error:", err);
+      }
+    };
+
     fetchRooms();
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        loadProfile(user);
+      } else {
+        router.replace("/User/Login");
+      }
+    });
+    return unsubscribe;
   }, []);
 
   return (

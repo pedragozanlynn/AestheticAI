@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Room Scanner Test</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 50px; }
+        #result { margin-top: 20px; max-width: 500px; border: 2px solid #ddd; }
+        .loading { color: blue; font-weight: bold; display: none; }
+    </style>
+</head>
+<body>
+    <h1>AestheticAI Scanner Test</h1>
+    <input type="file" id="photoInput" accept="image/*"><br><br>
+    <input type="text" id="promptInput" placeholder="Enter style (e.g. Modern Minimalist)"><br><br>
+    <button onclick="startScan()">Scan Room</button>
+    
+    <p class="loading" id="status">AI is painting your room... please wait (20-40s)</p>
+    <br>
+    <img id="result" src="" alt="AI Result will appear here" style="display:none">
+
+    <script>
+        async function startScan() {
+            const file = document.getElementById('photoInput').files[0];
+            const prompt = document.getElementById('promptInput').value;
+            const status = document.getElementById('status');
+            const resultImg = document.getElementById('result');
+
+            if(!file) return alert("Please select a photo first!");
+
+            status.style.display = "block";
+            resultImg.style.display = "none";
+            
+            const formData = new FormData();
+            formData.append('photo', file);
+            formData.append('prompt', prompt);
+
+            try {
+                // This calls YOUR Node.js server
+                const response = await fetch('http://localhost:3000/api/redesign-room', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error("Server Error");
+
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                
+                resultImg.src = url;
+                resultImg.style.display = "block";
+            } catch (err) {
+                alert("Error: " + err.message);
+            } finally {
+                status.style.display = "none";
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   Alert,
   Image,
@@ -14,9 +15,7 @@ import {
 } from "react-native";
 import {
   auth,
-  createUserWithEmailAndPassword,
   db,
-  updateProfile,
 } from "../../config/firebase";
 
 import { cacheUserRole } from "../../config/userCache";
@@ -76,7 +75,7 @@ export default function Register() {
 
       Alert.alert("Success", "Account created successfully!");
       setTimeout(() => {
-        router.replace("/Login");
+        router.replace("/User/Login");
       }, 2000);
     } catch (error) {
       Alert.alert("Registration Error", error.message);
@@ -186,7 +185,7 @@ export default function Register() {
           {/* ACTIONS */}
           <View style={styles.section}>
             <Button title="Register" onPress={register} />
-            <TouchableOpacity onPress={() => router.replace("/Login")} style={styles.footerLink}>
+            <TouchableOpacity onPress={() => router.replace("/User/Login")} style={styles.footerLink}>
               <Text style={styles.footer}>Already have an account? Login</Text>
             </TouchableOpacity>
           </View>
@@ -373,4 +372,3 @@ genderText: {
     fontSize: 14,
   },
 });
-
