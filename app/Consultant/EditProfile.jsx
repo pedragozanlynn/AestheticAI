@@ -96,8 +96,11 @@ export default function EditProfile() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-      <SafeAreaView style={{ backgroundColor: "#FFF" }}>
+      {/* StatusBar configuration para laging kita ang icons sa taas */}
+      <StatusBar barStyle="dark-content" backgroundColor="#FFF" translucent={false} />
+      
+      {/* SafeAreaView para sa iOS notch at top system spacing */}
+      <SafeAreaView style={styles.safeArea}>
         <View style={styles.headerRow}>
           <TouchableOpacity style={styles.backButton} onPress={router.back}>
             <Ionicons name="arrow-back" size={24} color="#1E293B" />
@@ -227,12 +230,12 @@ export default function EditProfile() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
+  safeArea: { backgroundColor: "#FFF" },
   headerRow: {
-
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 30,
+    paddingVertical: 15, // Binawasan mula 30 para sakto lang ang laki
     backgroundColor: "#FFF",
     borderBottomWidth: 1,
     borderBottomColor: "#F1F5F9",

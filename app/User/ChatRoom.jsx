@@ -1,4 +1,6 @@
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ImagePicker from "expo-image-picker"; // In-add ito
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { getAuth } from "firebase/auth";
 import {
@@ -7,25 +9,27 @@ import {
   doc,
   onSnapshot,
   serverTimestamp,
-  setDoc,
   updateDoc,
 } from "firebase/firestore";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  Dimensions,
   FlatList,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
+  Linking,
+  Modal,
   Platform,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  StatusBar,
-  ActivityIndicator,
-  Alert,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 
 import { db } from "../../config/firebase";
 import { listenToMessages, markUserChatAsRead } from "../../services/chatService";
@@ -34,25 +38,16 @@ import { handleUnsendMessage } from "../../services/handleUnsendMessage";
 import { useSendMessage } from "../../services/useSendMessage";
 import RatingModal from "../components/RatingModal";
 
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+
 const THEME = {
   primary: "#01579B",
   bg: "#F8FAFC",
   textDark: "#0F3E48",
   textGray: "#64748B",
-  completed: "#3FA796"
 };
 
-const formatActiveStatus = (isOnline, lastSeen) => {
-  if (isOnline) return "Active now";
-  if (!lastSeen?.toDate) return "Offline";
-  const mins = Math.floor((Date.now() - lastSeen.toDate()) / 60000);
-  if (mins < 1) return "Active just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  return hrs < 24 ? `${hrs}h ago` : `${Math.floor(hrs / 24)}d ago`;
-};
-
-export default function UserChatRoom() {
+export default function ChatRoom() {
   const router = useRouter();
   const { roomId, userId, consultantId } = useLocalSearchParams();
   const auth = getAuth();
@@ -64,25 +59,29 @@ export default function UserChatRoom() {
   const [loading, setLoading] = useState(true);
   const [ratingModalVisible, setRatingModalVisible] = useState(false);
   const [isChatLocked, setIsChatLocked] = useState(false);
+  const [previewImage, setPreviewImage] = useState(null);
+  const [showFileTray, setShowFileTray] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
   const flatListRef = useRef(null);
 
-  /* ================= LOAD USER PROFILE ================= */
   useEffect(() => {
     const loadUser = async () => {
-      const keys = await AsyncStorage.getAllKeys();
-      const key = keys.find((k) => k.startsWith("aestheticai:user-profile:"));
-      if (!key) return;
-      const raw = await AsyncStorage.getItem(key);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setUser({ ...parsed, uid: parsed.uid });
-      }
+      try {
+        const keys = await AsyncStorage.getAllKeys();
+        const key = keys.find((k) => k.startsWith("aestheticai:user-profile:"));
+        if (!key) return;
+        const raw = await AsyncStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          const finalUid = parsed.uid || parsed.id || auth.currentUser?.uid;
+          setUser({ ...parsed, uid: finalUid });
+        }
+      } catch (err) { console.error(err); }
     };
     loadUser();
   }, []);
 
-  /* ================= LOAD CONSULTANT INFO ================= */
   useEffect(() => {
     if (!consultantId) return;
     return onSnapshot(doc(db, "consultants", consultantId), (snap) => {
@@ -90,43 +89,28 @@ export default function UserChatRoom() {
     });
   }, [consultantId]);
 
-  /* ================= ROOM STATUS & LOCKING ================= */
   useEffect(() => {
-    if (!roomId || !userId || !consultantId) return;
-    const ref = doc(db, "chatRooms", roomId);
-
-    return onSnapshot(ref, (snap) => {
-      if (!snap.exists()) {
-        setDoc(ref, {
-          userId,
-          consultantId,
-          createdAt: serverTimestamp(),
-          status: "active",
-          ratingSubmitted: false,
-        });
-      } else {
+    if (!roomId) return;
+    return onSnapshot(doc(db, "chatRooms", roomId), (snap) => {
+      if (snap.exists()) {
         const data = snap.data();
         const createdAt = data.createdAt?.toDate?.();
-        const twelveHoursPassed = createdAt && Date.now() - createdAt.getTime() >= 12 * 60 * 60 * 1000;
-
-        if ((data.status === "completed" || twelveHoursPassed) && !data.ratingSubmitted) {
-          setRatingModalVisible(true);
-        }
-        setIsChatLocked(data.ratingSubmitted || data.status === "completed" || twelveHoursPassed);
+        const twelveHoursPassed = createdAt && (Date.now() - createdAt.getTime() >= 12 * 60 * 60 * 1000);
+        const finished = data.status === "completed" || twelveHoursPassed;
+        setIsChatLocked(finished);
+        if (finished && !data.ratingSubmitted) setRatingModalVisible(true);
       }
     });
-  }, [roomId, userId, consultantId]);
+  }, [roomId]);
 
-  /* ================= MESSAGES LOGIC ================= */
   useEffect(() => {
     if (!roomId || !user) return;
     setLoading(true);
     const unsub = listenToMessages(roomId, (msgs) => {
-      setMessages(msgs);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+        setMessages(msgs);
+        setLoading(false);
     });
     markUserChatAsRead(roomId).catch(() => {});
-    setLoading(false);
     return () => unsub();
   }, [roomId, user]);
 
@@ -137,39 +121,112 @@ export default function UserChatRoom() {
     setMessages,
   });
 
-  const confirmComplete = () => {
-    Alert.alert(
-      "End Consultation",
-      "Are you sure you want to mark this consultation as complete? You won't be able to send more messages.",
-      [
-        { text: "Keep Chatting", style: "cancel" },
-        { 
-          text: "End Now", 
-          onPress: async () => {
-            await updateDoc(doc(db, "chatRooms", roomId), { status: "completed" });
-          } 
-        }
-      ]
-    );
+  const handleSend = async () => {
+    if (!text.trim() || isChatLocked || isSending) return;
+    const msg = text.trim();
+    setText("");
+    setIsSending(true);
+    try { await sendTextMessage(msg); } 
+    catch (err) { console.log(err); } 
+    finally { setIsSending(false); }
+  };
+
+  const handleFileAction = async (type = 'gallery') => {
+    if (isChatLocked || isSending) return;
+    Keyboard.dismiss();
+    setShowFileTray(false);
+
+    try {
+      const file = await pickFile(type); 
+      if (!file) return;
+
+      setIsSending(true);
+      await sendFileMessage(file);
+    } catch (error) {
+      Alert.alert("Error", "Failed to process media.");
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  // BAGONG CAMERA FUNCTION MULA SA CONSULTANT CODE
+  const handleCameraAction = async () => {
+    if (isChatLocked || isSending) return;
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert("Permission Denied", "We need camera access to take photos.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.7,
+    });
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setIsSending(true);
+      try {
+        await sendFileMessage(result.assets[0]);
+      } catch (error) {
+        Alert.alert("Error", "Failed to upload photo.");
+      } finally {
+        setIsSending(false);
+      }
+    }
+  };
+  const onLongPressMessage = (item) => {
+    if (item.unsent || !user?.uid) return;
+      const myId = String(user.uid).trim();
+    const msgSenderId = String(item.senderId).trim();
+    const isMine = item.senderType === "user" || myId === msgSenderId;
+  
+    if (isMine) {
+      handleUnsendMessage(item, roomId, item.senderId || myId, setMessages);
+    } else {
+      Alert.alert("Notice", "You can only unsend your own messages.");
+    }
   };
 
   const renderMessage = ({ item }) => {
-    const mine = item.senderType === "user";
+    // Ito ang logic para sa kulay ng bubbles
+    const isMe = item.senderType === "user";
+    const isImage = item.type === "image";
+    const isFile = item.type === "file";
+
     return (
-      <View style={[styles.messageWrapper, mine ? styles.myWrapper : styles.theirWrapper]}>
+      <View style={[styles.messageWrapper, isMe ? styles.myWrapper : styles.theirWrapper]}>
         <TouchableOpacity
           activeOpacity={0.8}
-          onLongPress={() => mine && !item.unsent && handleUnsendMessage(item, roomId, user?.uid, setMessages)}
+          delayLongPress={500} // Importante para ma-trigger ang long press
+          onPress={() => {
+            if (item.unsent) return;
+            if (isImage) setPreviewImage(item.fileUrl);
+            else if (isFile) Linking.openURL(item.fileUrl);
+          }}
+          onLongPress={() => onLongPressMessage(item)}
           style={[
             styles.messageBubble,
-            mine ? styles.myBubble : styles.theirBubble,
+            isMe ? styles.myBubble : styles.theirBubble,
+            (isImage || isFile) && !item.unsent && styles.mediaBubbleFix,
+            item.unsent && styles.unsentBubble,
           ]}
         >
-          {item.type === "image" ? (
-            <Image source={{ uri: item.fileUrl }} style={styles.imageMsg} />
+          {item.unsent ? (
+            <View style={styles.unsentRow}>
+              <Text style={styles.unsentText}>🚫 Message unsent</Text>
+            </View>
+          ) : isImage ? (
+            <View style={styles.imageContainer}>
+              <Image source={{ uri: item.fileUrl }} style={styles.imageMsg} resizeMode="cover" />
+            </View>
+          ) : isFile ? (
+            <View style={styles.fileRow}>
+              <Ionicons name="document-text" size={24} color={isMe ? "#FFF" : "#01579B"} />
+              <Text style={[styles.fileText, isMe ? styles.myText : styles.theirText]} numberOfLines={1}>
+                {item.fileName || "Document"}
+              </Text>
+            </View>
           ) : (
-            <Text style={[styles.messageText, mine ? styles.myText : styles.theirText]}>
-              {item.unsent ? "🚫 Message unsent" : item.text}
+            <Text style={[styles.messageText, isMe ? styles.myText : styles.theirText]}>
+              {item.text}
             </Text>
           )}
         </TouchableOpacity>
@@ -177,106 +234,104 @@ export default function UserChatRoom() {
     );
   };
 
+
   return (
     <View style={styles.mainContainer}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
 
-      {/* MODERN WHITE HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={28} color={THEME.textDark} />
+          <Ionicons name="chevron-back" size={28} color="#0F3E48" />
         </TouchableOpacity>
-
-        <View style={styles.headerProfile}>
-          <View style={styles.avatarContainer}>
-            <Image
-              source={
-                consultant?.gender === "Female"
-                  ? require("../../assets/office-woman.png")
-                  : require("../../assets/office-man.png")
-              }
-              style={styles.avatar}
-            />
-            {consultant?.isOnline && <View style={styles.onlineDot} />}
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={styles.nameText} numberOfLines={1}>
-              {consultant?.fullName || "Consultant"}
-            </Text>
-            <Text style={styles.statusText}>
-              {formatActiveStatus(consultant?.isOnline, consultant?.lastSeen)}
-            </Text>
+        <Image
+          source={consultant?.gender === "Female" ? require("../../assets/office-woman.png") : require("../../assets/office-man.png")}
+          style={styles.avatar}
+        />
+        <View style={styles.headerInfo}>
+          <Text style={styles.nameText}>{consultant?.fullName || "Consultant"}</Text>
+          <View style={styles.statusRow}>
+            <View style={[styles.statusDot, { backgroundColor: consultant?.isOnline ? "#22C55E" : "#94A3B8" }]} />
+            <Text style={styles.statusText}>{consultant?.isOnline ? "Active now" : "Offline"}</Text>
           </View>
         </View>
-
-        {!isChatLocked && (
-          <TouchableOpacity onPress={confirmComplete} style={styles.completeBtn}>
-            <Ionicons name="checkmark-done-circle" size={30} color={THEME.completed} />
-          </TouchableOpacity>
-        )}
       </View>
 
-      {isChatLocked && (
-        <View style={styles.completedBanner}>
-          <Ionicons name="lock-closed" size={14} color={THEME.textGray} />
-          <Text style={styles.completedBannerText}>This consultation has ended</Text>
-        </View>
-      )}
-
-      {loading ? (
-        <View style={styles.loader}>
-          <ActivityIndicator size="large" color={THEME.primary} />
-        </View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(i) => i.id}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
-
-      <KeyboardAvoidingView
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
       >
-        <View style={[styles.inputWrapper, isChatLocked && styles.disabledInput]}>
-          <TouchableOpacity
-            disabled={isChatLocked}
-            onPress={async () => {
-              const file = await pickFile();
-              if (file) await sendFileMessage(file);
-            }}
-            style={styles.attachmentBtn}
-          >
-            <Ionicons name="add-circle-outline" size={30} color={isChatLocked ? "#CBD5E1" : THEME.primary} />
-          </TouchableOpacity>
+        <View style={styles.chatArea}>
+          {loading ? (
+            <ActivityIndicator style={{ flex: 1 }} color={THEME.primary} />
+          ) : (
+            <FlatList
+              ref={flatListRef}
+              data={[...messages].reverse()}
+              renderItem={renderMessage}
+              keyExtractor={(i) => i.id}
+              contentContainerStyle={styles.listContent}
+              inverted
+              keyboardShouldPersistTaps="handled"
+              removeClippedSubviews={false}
+            />
+          )}
+        </View>
 
-          <TextInput
-            style={styles.textInput}
-            value={text}
-            editable={!isChatLocked}
-            placeholder={isChatLocked ? "Chat locked" : "Type a message..."}
-            placeholderTextColor="#94A3B8"
-            onChangeText={setText}
-            multiline
-          />
+        <View style={styles.footer}>
+          <View style={styles.inputWrapper}>
+            {/* TRAY TOGGLE BUTTON */}
+            <TouchableOpacity disabled={isChatLocked} onPress={() => { Keyboard.dismiss(); setShowFileTray(!showFileTray); }}>
+              <Ionicons name={showFileTray ? "close-circle" : "add-circle"} size={32} color={isChatLocked ? "#CBD5E1" : THEME.primary} />
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.sendButton, (!text.trim() || isChatLocked) && styles.sendDisabled]}
-            disabled={!text.trim() || isChatLocked}
-            onPress={async () => {
-              if (!text.trim()) return;
-              await sendTextMessage(text);
-              setText("");
-            }}
-          >
-            <Ionicons name="send" size={20} color="#fff" />
-          </TouchableOpacity>
+            {/* DIRECT CAMERA BUTTON (GINAMIT ANG HANDLE CAMERA ACTION) */}
+            <TouchableOpacity 
+              disabled={isChatLocked} 
+              onPress={handleCameraAction}
+              style={styles.directCameraBtn}
+            >
+              <Ionicons name="camera" size={32} color={isChatLocked ? "#CBD5E1" : "#01579B"} />
+            </TouchableOpacity>
+
+            <TextInput
+              style={styles.textInput}
+              value={text}
+              editable={!isChatLocked}
+              placeholder={isChatLocked ? "Chat completed" : "Message..."}
+              onChangeText={(t) => { setText(t); if(showFileTray) setShowFileTray(false); }}
+              multiline
+            />
+
+            <TouchableOpacity
+              style={[styles.sendBtn, text.trim() && !isChatLocked ? styles.sendBtnActive : styles.sendBtnInactive]}
+              disabled={!text.trim() || isChatLocked || isSending}
+              onPress={handleSend}
+            >
+              {isSending ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="send" size={18} color="#fff" />}
+            </TouchableOpacity>
+          </View>
+
+          {showFileTray && !isChatLocked && (
+            <View style={styles.tray}>
+              <TouchableOpacity style={styles.trayItem} onPress={() => handleFileAction('gallery')}>
+                <View style={[styles.trayIcon, { backgroundColor: '#E0F2FE' }]}><Ionicons name="image" size={26} color="#0284C7" /></View>
+                <Text style={styles.trayLabel}>Gallery</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.trayItem} onPress={() => handleFileAction('file')}>
+                <View style={[styles.trayIcon, { backgroundColor: '#DCFCE7' }]}><Ionicons name="document" size={26} color="#16A34A" /></View>
+                <Text style={styles.trayLabel}>File</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </KeyboardAvoidingView>
+
+      <Modal visible={!!previewImage} transparent animationType="fade">
+        <View style={styles.fullScreenOverlay}>
+          <TouchableOpacity style={styles.closePreview} onPress={() => setPreviewImage(null)}><Ionicons name="close" size={30} color="#FFF" /></TouchableOpacity>
+          <Image source={{ uri: previewImage }} style={styles.fullImage} resizeMode="contain" />
+        </View>
+      </Modal>
 
       <RatingModal
         visible={ratingModalVisible}
@@ -284,23 +339,8 @@ export default function UserChatRoom() {
         onClose={() => setRatingModalVisible(false)}
         onSubmit={async ({ rating, feedback, reviewerName }) => {
           try {
-            if (!auth.currentUser) return false;
-            await addDoc(collection(db, "ratings"), {
-              roomId,
-              userId: auth.currentUser.uid,
-              consultantId,
-              rating,
-              feedback,
-              reviewerName,
-              createdAt: serverTimestamp(),
-            });
-            await updateDoc(doc(db, "chatRooms", roomId), {
-              ratingSubmitted: true,
-              status: "completed",
-            });
-            await updateDoc(doc(db, "appointments", roomId.replace("appointment_", "")), {
-              status: "completed",
-            });
+            await addDoc(collection(db, "ratings"), { roomId, userId: user?.uid, consultantId, rating, feedback, reviewerName, createdAt: serverTimestamp() });
+            await updateDoc(doc(db, "chatRooms", roomId), { ratingSubmitted: true, status: "completed" });
             return true;
           } catch (err) { return false; }
         }}
@@ -311,85 +351,55 @@ export default function UserChatRoom() {
 
 const styles = StyleSheet.create({
   mainContainer: { flex: 1, backgroundColor: THEME.bg },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingTop: Platform.OS === "ios" ? 50 : 40,
-    paddingBottom: 15,
-    paddingHorizontal: 15,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
-    elevation: 2,
+  header: { 
+    flexDirection: "row", alignItems: "center", paddingHorizontal: 15, 
+    height: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 70 : 110,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 50,
+    borderBottomWidth: 1, borderBottomColor: "#E2E8F0", backgroundColor: "#FFF", zIndex: 100
   },
   backBtn: { padding: 5 },
-  headerProfile: { flex: 1, flexDirection: "row", alignItems: "center", marginLeft: 10 },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#F1F5F9" },
-  onlineDot: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#22C55E',
-    borderWidth: 2,
-    borderColor: '#FFF'
-  },
-  textContainer: { marginLeft: 10 },
-  nameText: { fontSize: 16, fontWeight: "800", color: THEME.textDark, maxWidth: 160 },
-  statusText: { fontSize: 12, color: THEME.textGray },
-  completeBtn: { padding: 5 },
-  completedBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F1F5F9',
-    paddingVertical: 8,
-    gap: 6
-  },
-  completedBannerText: { fontSize: 12, color: THEME.textGray, fontWeight: '600' },
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  listContent: { paddingHorizontal: 15, paddingVertical: 20, paddingBottom: 40 },
-  messageWrapper: { marginVertical: 4, flexDirection: 'row', width: '100%' },
-  myWrapper: { justifyContent: 'flex-end' },
-  theirWrapper: { justifyContent: 'flex-start' },
-  messageBubble: { maxWidth: "80%", paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20 },
-  myBubble: { backgroundColor: THEME.primary, borderBottomRightRadius: 4 },
-  theirBubble: { backgroundColor: "#FFF", borderBottomLeftRadius: 4, borderWidth: 1, borderColor: "#F1F5F9" },
-  messageText: { fontSize: 15, lineHeight: 20 },
+  avatar: { width: 42, height: 42, borderRadius: 21, marginLeft: 5 },
+  headerInfo: { marginLeft: 12 },
+  nameText: { fontSize: 16, fontWeight: "700", color: "#1E293B" },
+  statusRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 5 },
+  statusText: { fontSize: 12, color: "#64748B" },
+  chatArea: { flex: 1 },
+  listContent: { paddingHorizontal: 16, paddingVertical: 20 },
+  messageWrapper: { marginVertical: 6, flexDirection: "row" },
+  myWrapper: { justifyContent: "flex-end" },
+  theirWrapper: { justifyContent: "flex-start" },
+  messageBubble: { maxWidth: "82%", paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18 },
+  myBubble: { backgroundColor: "#01579B", borderBottomRightRadius: 4 },
+  theirBubble: { backgroundColor: "#FFF", borderBottomLeftRadius: 4, borderWidth: 1, borderColor: "#E2E8F0" },
+  mediaBubbleFix: { padding: 0, overflow: 'hidden' },
+  unsentBubble: { opacity: 0.6, borderStyle: "dashed", borderWidth: 1, borderColor: '#CBD5E1', backgroundColor: '#F8FAFC' },
+  messageText: { fontSize: 15, lineHeight: 22 },
   myText: { color: "#FFF" },
-  theirText: { color: "#1E293B" },
-  imageMsg: { width: 200, height: 150, borderRadius: 10 },
-  inputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    backgroundColor: "#FFF",
-    borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+  theirText: { color: "#334155" },
+  unsentRow: { flexDirection: 'row', alignItems: 'center' },
+  unsentText: { color: "#8f2f52", fontStyle: 'italic', fontSize: 13, fontWeight: "600" },
+  imageContainer: { width: 230, height: 170 },
+  imageMsg: { width: "100%", height: "100%", borderRadius: 15 },
+  fileRow: { flexDirection: "row", alignItems: "center", padding: 12, minWidth: 180 },
+  fileText: { marginLeft: 10, fontWeight: "600", fontSize: 14 },
+  footer: { 
+    backgroundColor: "#FFF", borderTopWidth: 1, borderTopColor: "#E2E8F0", 
+    paddingHorizontal: 12, paddingTop: 10, 
+    paddingBottom: Platform.OS === 'ios' ? 35 : 15, 
+    minHeight: Platform.OS === 'ios' ? 100 : 80, justifyContent: 'center'
   },
-  disabledInput: { backgroundColor: "#F8FAFC" },
-  attachmentBtn: { marginRight: 10 },
-  textInput: {
-    flex: 1,
-    backgroundColor: "#F1F5F9",
-    borderRadius: 25,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    maxHeight: 100,
-    fontSize: 15,
-    color: "#1E293B",
-  },
-  sendButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: THEME.primary,
-    justifyContent: "center",
-    alignItems: "center",
-    marginLeft: 10,
-  },
-  sendDisabled: { backgroundColor: "#CBD5E1" },
+  inputWrapper: { flexDirection: "row", alignItems: "center" },
+  directCameraBtn: { marginLeft: 5 },
+  textInput: { flex: 1, marginLeft: 8, marginRight: 8, backgroundColor: "#F1F5F9", borderRadius: 22, paddingHorizontal: 16, paddingVertical: Platform.OS === 'ios' ? 10 : 8, maxHeight: 100 },
+  sendBtn: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
+  sendBtnActive: { backgroundColor: "#01579B" },
+  sendBtnInactive: { backgroundColor: "#CBD5E1" },
+  tray: { flexDirection: "row", justifyContent: "space-around", paddingTop: 15, height: 100 },
+  trayItem: { alignItems: 'center' },
+  trayIcon: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginBottom: 5 },
+  trayLabel: { fontSize: 12, color: '#64748B' },
+  fullScreenOverlay: { flex: 1, backgroundColor: "black", justifyContent: "center" },
+  closePreview: { position: 'absolute', top: 50, right: 20, zIndex: 10 },
+  fullImage: { width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.8 },
 });

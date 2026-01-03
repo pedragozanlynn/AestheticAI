@@ -113,6 +113,12 @@ export default function ChangePassword() {
         </View>
 
         <View style={styles.profileHeaderDivider} />
+        <View style={styles.infoBox}>
+          <Ionicons name="shield-checkmark" size={20} color="#0D9488" />
+          <Text style={styles.infoText}>
+            Updating your password will log you out from all devices for security.
+          </Text>
+        </View>
 
         {/* ===== FORM CARD ===== */}
         <View style={styles.card}>
@@ -208,6 +214,24 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "#E4E6EB",
     marginBottom: 25,
+  },
+  infoBox: {
+    flexDirection: "row",
+    backgroundColor: "#F0FDFA",
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#CCFBF1",
+    marginBottom: 20,
+    alignItems: "center",
+  },
+  infoText: {
+    fontSize: 12,
+    color: "#0D9488",
+    marginLeft: 10,
+    flex: 1,
+    fontWeight: "500",
+    lineHeight: 18,
   },
   card: {
     backgroundColor: "#fff",

@@ -10,6 +10,8 @@ import {
   View,
   ScrollView,
   StatusBar,
+  SafeAreaView, // Idinagdag para sa Notch/Status bar space
+  Platform,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { Calendar } from "react-native-calendars";
@@ -96,13 +98,11 @@ export default function EditAvailability() {
 
   return (
     <View style={styles.page}>
-      <StatusBar barStyle="dark-content" />
+      {/* Configuration para makita ang oras at battery icons */}
+      <StatusBar barStyle="dark-content" backgroundColor="#FFF" translucent={false} />
       
-      <ScrollView 
-        showsVerticalScrollIndicator={false} 
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* ===== HEADER (IBINALIK SA DATI) ===== */}
+      {/* SafeAreaView para sa iOS Notch at Android Top Space */}
+      <SafeAreaView style={styles.safeArea}>
         <View style={styles.headerRow}>
           <TouchableOpacity style={styles.backButton} onPress={router.back}>
             <Ionicons name="arrow-back" size={22} color="#0F3E48" />
@@ -114,7 +114,12 @@ export default function EditAvailability() {
             </Text>
           </View>
         </View>
+      </SafeAreaView>
 
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+      >
         <View style={styles.divider} />
 
         {/* ===== CALENDAR AREA ===== */}
@@ -190,14 +195,15 @@ export default function EditAvailability() {
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: "#F3F9FA" },
+  safeArea: { backgroundColor: "#FFF" }, // Para sumunod ang background ng top area
   scrollContent: { padding: 16, paddingBottom: 40 },
 
-  /* HEADER ORIGINAL STYLE */
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 30,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'android' ? 15 : 10, // Dynamic padding base sa platform
+    backgroundColor: "#FFF",
   },
   backButton: {
     width: 42,

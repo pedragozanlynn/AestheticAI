@@ -194,8 +194,8 @@ const styles = StyleSheet.create({
   profileRow: { flexDirection: "row", alignItems: "center" },
   avatarContainer: { position: 'relative' },
   avatarImage: {
-    width: 75,
-    height: 75,
+    width: 70,
+    height: 70,
     borderRadius: 25,
     borderWidth: 3,
     borderColor: "rgba(255,255,255,0.3)",
@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
     borderColor: "#01579B",
   },
   profileInfo: { marginLeft: 18 },
-  headerName: { fontSize: 24, fontWeight: "900", color: "#FFF" },
+  headerName: { fontSize: 21, fontWeight: "900", color: "#FFF" },
   roleTag: {
     backgroundColor: "rgba(255,255,255,0.15)",
     paddingHorizontal: 10,

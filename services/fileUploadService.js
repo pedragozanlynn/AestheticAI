@@ -25,7 +25,9 @@ export const pickFile = async () => {
 
 export const uploadToSupabase = async (file) => {
   try {
-    const fileExt = file.name.split(".").pop();
+    // FIX: Fallback kung walang file.name (gaya ng sa Camera)
+    const fileName = file.name || `camera_${Date.now()}.jpg`;
+    const fileExt = fileName.split(".").pop();
     const filePath = `uploads/${Date.now()}.${fileExt}`;
 
     // Read the file as arraybuffer
@@ -36,7 +38,8 @@ export const uploadToSupabase = async (file) => {
     const { data, error } = await supabase.storage
       .from("chat-files")
       .upload(filePath, fileBytes, {
-        contentType: file.mimeType,
+        // FIX: Fallback para sa mimeType (type ang gamit ng image-picker)
+        contentType: file.mimeType || file.type || "image/jpeg",
         upsert: false,
       });
 
@@ -51,8 +54,8 @@ export const uploadToSupabase = async (file) => {
 
     return {
       fileUrl: publicURL.publicUrl,
-      fileName: file.name,
-      fileType: file.mimeType,
+      fileName: fileName,
+      fileType: file.mimeType || file.type || "image/jpeg",
     };
   } catch (err) {
     console.log("❌ uploadToSupabase error:", err);
@@ -61,12 +64,13 @@ export const uploadToSupabase = async (file) => {
 };
 
 /////////////////////////////////////////////////////////////////////////////////////
-// ✅ ADD ONLY — Portfolio Upload (NEW FUNCTION, NOTHING IN ORIGINAL CODE CHANGED)
+// ✅ Portfolio Upload (Updated with same fix)
 /////////////////////////////////////////////////////////////////////////////////////
 
 export const uploadPortfolio = async (file) => {
   try {
-    const fileExt = file.name.split(".").pop();
+    const fileName = file.name || `portfolio_${Date.now()}.jpg`;
+    const fileExt = fileName.split(".").pop();
     const filePath = `portfolio/${Date.now()}.${fileExt}`;
 
     const response = await fetch(file.uri);
@@ -74,9 +78,9 @@ export const uploadPortfolio = async (file) => {
     const fileBytes = new Uint8Array(arrayBuffer);
 
     const { data, error } = await supabase.storage
-      .from("portfolio-file")   // 👉 NEW BUCKET
+      .from("portfolio-file")
       .upload(filePath, fileBytes, {
-        contentType: file.mimeType,
+        contentType: file.mimeType || file.type || "image/jpeg",
         upsert: false,
       });
 
@@ -91,8 +95,8 @@ export const uploadPortfolio = async (file) => {
 
     return {
       fileUrl: publicURL.publicUrl,
-      fileName: file.name,
-      fileType: file.mimeType,
+      fileName: fileName,
+      fileType: file.mimeType || file.type || "image/jpeg",
     };
   } catch (err) {
     console.log("❌ uploadPortfolio error:", err);

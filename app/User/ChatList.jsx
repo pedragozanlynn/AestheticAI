@@ -35,6 +35,7 @@ const THEME = {
 
 export default function ChatList() {
   const [rooms, setRooms] = useState([]);
+  const [activeTab, setActiveTab] = useState("ongoing"); // Idinagdag na state
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [currentPaymentData, setCurrentPaymentData] = useState(null);
   const router = useRouter();
@@ -112,12 +113,18 @@ export default function ChatList() {
     return () => unsub && unsub();
   }, []);
 
+  // Filter Logic para sa Tabs
+  const filteredRooms = rooms.filter((room) => {
+    if (activeTab === "ongoing") return room.status !== "completed";
+    return room.status === "completed";
+  });
+
   /* ================= UI ================= */
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={THEME.primary} />
       
-      {/* HEADER WITH BACK BUTTON */}
+      {/* HEADER */}
       <View style={styles.header}>
         <SafeAreaView>
           <View style={styles.headerContent}>
@@ -137,8 +144,26 @@ export default function ChatList() {
         </SafeAreaView>
       </View>
 
+      {/* FLOATING TABS (Ongoing & Completed) */}
+      <View style={styles.filterWrapper}>
+        <View style={styles.tabBar}>
+          {["ongoing", "completed"].map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.tabItem, activeTab === tab && styles.activeTabItem]}
+              onPress={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.tabLabel, activeTab === tab && styles.activeTabLabel]}>
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </Text>
+              {activeTab === tab && <View style={styles.activeDot} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
       <FlatList
-        data={rooms}
+        data={filteredRooms}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
@@ -163,13 +188,17 @@ export default function ChatList() {
                 {item.lastMessage || "No messages yet"}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
+            <Ionicons 
+                name={activeTab === 'ongoing' ? "chevron-forward" : "checkmark-circle"} 
+                size={16} 
+                color={activeTab === 'ongoing' ? "#CBD5E1" : "#10B981"} 
+            />
           </TouchableOpacity>
         )}
         ListEmptyComponent={
           <View style={styles.emptyBox}>
-            <Ionicons name="chatbubbles-outline" size={60} color="#CBD5E1" />
-            <Text style={styles.emptyText}>No active conversations yet</Text>
+            <Ionicons name="chatbubbles-outline" size={50} color="#CBD5E1" />
+            <Text style={styles.emptyText}>No {activeTab} conversations</Text>
           </View>
         }
       />
@@ -186,19 +215,18 @@ export default function ChatList() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FFF" },
+  container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
     backgroundColor: THEME.primary,
-    paddingTop: 10,
-    paddingBottom: 20,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
+    paddingTop: 30,
+    paddingBottom: 20, // Dinagdagan para sa overlap
+   
   },
   headerContent: { paddingHorizontal: 15, paddingTop: 10 },
   headerTopRow: { flexDirection: 'row', alignItems: 'center' },
   backBtn: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: 12,
     backgroundColor: "rgba(255,255,255,0.2)",
     justifyContent: 'center',
@@ -209,7 +237,52 @@ const styles = StyleSheet.create({
   headerTitle: { color: "#fff", fontSize: 24, fontWeight: "800" },
   headerSub: { color: "rgba(255,255,255,0.7)", fontSize: 13, marginTop: -2 },
 
-  listContainer: { padding: 16, paddingBottom: 100 },
+  /* TABS STYLING */
+  filterWrapper: {
+    paddingHorizontal: 20,
+    marginTop: 25, // Overlap sa header
+    marginBottom: 5,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#FFF',
+    borderRadius: 15,
+    padding: 5,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  tabItem: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    borderRadius: 10,
+  },
+  activeTabItem: {
+    backgroundColor: '#F1F5F9',
+  },
+  tabLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+  activeTabLabel: {
+    color: THEME.primary,
+  },
+  activeDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: THEME.primary,
+    marginLeft: 6,
+  },
+
+  listContainer: { padding: 16, paddingTop: 15, paddingBottom: 100 },
   chatCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -219,11 +292,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F1F5F9",
     marginBottom: 12,
-    elevation: 3,
+    elevation: 2,
     shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
   },
   avatar: {
     width: 50,

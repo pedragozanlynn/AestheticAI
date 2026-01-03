@@ -8,59 +8,58 @@ export default function UpgradeInfo() {
 
   return (
     <View style={styles.page}>
-      {/* Dark content status bar para sa malinis na look */}
       <StatusBar barStyle="dark-content" backgroundColor="#FDFEFF" />
       
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
-        {/* HEADER - Dark Teal Title */}
+        {/* HEADER - Pinaliit ang back button at title */}
         <View style={styles.header}>
           <TouchableOpacity style={styles.backCircle} onPress={() => router.back()}>
-            <Ionicons name="chevron-back" size={24} color="#2c4f4f" />
+            <Ionicons name="chevron-back" size={20} color="#2c4f4f" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Premium Plan</Text>
         </View>
 
-        {/* HERO SECTION */}
+        {/* HERO SECTION - Pinaliit ang title at subtitle */}
         <View style={styles.heroContainer}>
             <View style={styles.premiumBadge}>
-                <Ionicons name="diamond" size={16} color="#01579B" />
+                <Ionicons name="diamond" size={12} color="#01579B" />
                 <Text style={styles.badgeText}>EXCLUSIVE ACCESS</Text>
             </View>
-            <Text style={styles.title}>Unlock All Premium Features</Text>
+            <Text style={styles.title}>Unlock Premium Features</Text>
             <Text style={styles.subtitle}>
-                Transform your space with full access to our elite AI tools and expert consultations.
+                Transform your space with full access to elite AI tools and expert consultations.
             </Text>
         </View>
 
-        {/* FEATURE LIST CARD - Deep Blue & Dark Teal Accents */}
+        {/* FEATURE LIST CARD - Ginawang mas compact ang padding at icons */}
         <View style={styles.card}>
           <Text style={styles.cardLabel}>WHAT'S INCLUDED</Text>
           
           <FeatureRow icon="color-wand" text="Unlimited AI Room Designs" />
           <FeatureRow icon="chatbubble-ellipses" text="1-on-1 Chat with Consultants" />
           <FeatureRow icon="sparkles" text="Premium Tools & Suggestions" />
-          <FeatureRow icon="shield-checkmark" text="Priority Customer Support" />
+          <FeatureRow icon="shield-checkmark" text="Priority Support" />
         </View>
 
-        {/* PRICE BOX - Dark Teal Price */}
+        {/* PRICE BOX - Pinaliit ang font size ng price */}
         <View style={styles.priceBox}>
           <View style={styles.priceRow}>
             <Text style={styles.currency}>₱</Text>
-            <Text style={styles.price}>499</Text>
+            <Text style={styles.price}>399</Text>
             <Text style={styles.perMonth}>/mo</Text>
           </View>
           <Text style={styles.cancelText}>Cancel anytime. No hidden fees.</Text>
         </View>
 
-        {/* BUTTON - Bright Teal-Green (Consultant Style) */}
+        {/* UPGRADE BUTTON - Pinababa ang height at font size */}
         <TouchableOpacity
           activeOpacity={0.8}
           style={styles.upgradeButton}
           onPress={() => router.push("/User/UpgradePayment")}
         >
           <Text style={styles.upgradeText}>Continue to Upgrade</Text>
-          <Ionicons name="arrow-forward" size={20} color="#FFF" />
+          <Ionicons name="arrow-forward" size={18} color="#FFF" />
         </TouchableOpacity>
 
       </ScrollView>
@@ -71,170 +70,90 @@ export default function UpgradeInfo() {
 const FeatureRow = ({ icon, text }) => (
     <View style={styles.row}>
         <View style={styles.iconWrapper}>
-            <Ionicons name={icon} size={20} color="#01579B" />
+            <Ionicons name={icon} size={16} color="#01579B" />
         </View>
         <Text style={styles.feature}>{text}</Text>
-        {/* Green checkmark para sa visual confirmation */}
-        <Ionicons name="checkmark-circle" size={22} color="#3fa796" style={{marginLeft: 'auto'}} />
     </View>
 );
 
 const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: "#FDFEFF",
-  },
-  scrollContent: {
-    paddingBottom: 40,
-  },
+  page: { flex: 1, backgroundColor: "#FDFEFF" },
+  scrollContent: { paddingBottom: 30 },
   header: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 50 : 20,
-    marginBottom: 20,
+    paddingTop: Platform.OS === 'ios' ? 45 : 15,
+    marginBottom: 10,
   },
   backCircle: {
-    width: 45,
-    height: 45,
-    borderRadius: 15,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 3,
-    shadowColor: '#2c4f4f',
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#2c4f4f", // Dark Teal
-    marginLeft: 15,
-  },
-  heroContainer: {
-    alignItems: 'center',
-    paddingHorizontal: 30,
-    marginVertical: 10,
-  },
+  headerTitle: { fontSize: 16, fontWeight: "700", color: "#2c4f4f", marginLeft: 12 },
+  heroContainer: { alignItems: 'center', paddingHorizontal: 40, marginVertical: 15 },
   premiumBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0F7FF', // Soft Light Blue
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginBottom: 15,
-    gap: 6,
+    backgroundColor: '#F0F7FF',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 15,
+    marginBottom: 10,
+    gap: 4,
   },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#01579B', // Deep Blue
-    letterSpacing: 1,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "900",
-    color: "#2c4f4f", // Dark Teal
-    textAlign: "center",
-    lineHeight: 34,
-  },
-  subtitle: {
-    textAlign: "center",
-    color: "#64748B",
-    marginTop: 12,
-    fontSize: 15,
-    lineHeight: 22,
-  },
+  badgeText: { fontSize: 9, fontWeight: '800', color: '#01579B', letterSpacing: 0.5 },
+  title: { fontSize: 22, fontWeight: "800", color: "#2c4f4f", textAlign: "center", lineHeight: 28 },
+  subtitle: { textAlign: "center", color: "#64748B", marginTop: 8, fontSize: 13, lineHeight: 18 },
   card: {
     backgroundColor: "#fff",
-    marginHorizontal: 25,
-    borderRadius: 25,
-    padding: 24,
-    marginTop: 30,
+    marginHorizontal: 30,
+    borderRadius: 20,
+    padding: 20,
+    marginTop: 15,
     borderWidth: 1,
     borderColor: "#F1F5F9",
-    elevation: 5,
-    shadowColor: '#2c4f4f',
-    shadowOpacity: 0.1,
-    shadowRadius: 15,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
   },
-  cardLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#94A3B8',
-    letterSpacing: 1.5,
-    marginBottom: 20,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 18,
-    gap: 15,
-  },
+  cardLabel: { fontSize: 10, fontWeight: '700', color: '#94A3B8', letterSpacing: 1, marginBottom: 15 },
+  row: { flexDirection: "row", alignItems: "center", marginBottom: 14, gap: 12 },
   iconWrapper: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     backgroundColor: '#F0F7FF',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  feature: {
-    fontSize: 15,
-    color: "#1E293B",
-    fontWeight: "600",
-  },
-  priceBox: {
-    alignItems: "center",
-    marginTop: 35,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  currency: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: "#2c4f4f",
-    marginRight: 2,
-  },
-  price: {
-    fontSize: 54,
-    fontWeight: "900",
-    color: "#2c4f4f", // Dark Teal
-    letterSpacing: -2,
-  },
-  perMonth: {
-    fontSize: 18,
-    color: "#64748B",
-    fontWeight: '600',
-  },
-  cancelText: {
-    fontSize: 13,
-    color: "#94A3B8",
-    marginTop: 5,
-  },
+  feature: { fontSize: 13, color: "#1E293B", fontWeight: "600" },
+  priceBox: { alignItems: "center", marginTop: 25 },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline' },
+  currency: { fontSize: 18, fontWeight: '700', color: "#2c4f4f", marginRight: 2 },
+  price: { fontSize: 42, fontWeight: "900", color: "#2c4f4f", letterSpacing: -1.5 },
+  perMonth: { fontSize: 14, color: "#64748B", fontWeight: '600' },
+  cancelText: { fontSize: 11, color: "#94A3B8", marginTop: 4 },
   upgradeButton: {
-    backgroundColor: "#3fa796", // Bright Teal-Green (Consultant Color)
-    marginHorizontal: 30,
-    height: 65,
-    borderRadius: 22,
-    marginTop: 30,
+    backgroundColor: "#3fa796",
+    marginHorizontal: 35,
+    height: 54,
+    borderRadius: 18,
+    marginTop: 25,
     flexDirection: 'row',
     justifyContent: "center",
     alignItems: "center",
-    gap: 10,
-    shadowColor: "#3fa796",
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
+    gap: 8,
+    elevation: 4,
   },
-  upgradeText: {
-    color: "#FFF",
-    fontWeight: "800",
-    fontSize: 18,
-    letterSpacing: 0.5,
-  },
+  upgradeText: { color: "#FFF", fontWeight: "700", fontSize: 16 },
 });

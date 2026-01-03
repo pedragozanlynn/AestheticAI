@@ -24,7 +24,6 @@ export default function UpgradePayment() {
 
   const gcashLogo = require("../../assets/gcash_logo.png");
 
-  // ⭐ Demo GCash Info
   const GCASH_NAME = "AestheticAI";
   const GCASH_NUMBER = "0995 862 1473";
 
@@ -46,11 +45,10 @@ export default function UpgradePayment() {
 
       Alert.alert(
         "Payment Submitted",
-        "Your payment will be verified by the admin within 24 hours.",
+        "Your payment will be verified within 24 hours.",
         [{ text: "OK", onPress: () => router.replace("/User/Home") }]
       );
     } catch (error) {
-      console.log(error);
       Alert.alert("Error", "Something went wrong while submitting payment.");
     }
   };
@@ -63,11 +61,11 @@ export default function UpgradePayment() {
         {/* BACK BUTTON & HEADER */}
         <View style={styles.header}>
           <TouchableOpacity style={styles.backCircle} onPress={() => router.back()}>
-            <Ionicons name="chevron-back" size={24} color="#000" />
+            <Ionicons name="chevron-back" size={22} color="#000" />
           </TouchableOpacity>
           <Text style={styles.title}>Payment Details</Text>
           <Text style={styles.subtitle}>
-            Send your payment via GCash and upload the transaction details below.
+            Send payment via GCash and enter the transaction details below.
           </Text>
         </View>
 
@@ -89,7 +87,10 @@ export default function UpgradePayment() {
             <Text style={styles.label}>GCash Number</Text>
             <View style={styles.numberContainer}>
                 <Text style={styles.value}>{GCASH_NUMBER}</Text>
-                <TouchableOpacity onPress={() => Alert.alert("Copied", "Number copied to clipboard")}>
+                <TouchableOpacity 
+                    style={styles.copyBtn} 
+                    onPress={() => Alert.alert("Copied", "Number copied to clipboard")}
+                >
                     <Ionicons name="copy-outline" size={18} color="#3fa796" />
                 </TouchableOpacity>
             </View>
@@ -111,7 +112,7 @@ export default function UpgradePayment() {
             />
           </View>
 
-          <Text style={styles.inputLabel}>GCash Reference Number</Text>
+          <Text style={styles.inputLabel}>Reference Number</Text>
           <View style={styles.inputWrapper}>
             <Ionicons name="receipt-outline" size={20} color="#94A3B8" style={styles.inputIcon} />
             <TextInput
@@ -124,7 +125,7 @@ export default function UpgradePayment() {
           </View>
         </View>
 
-        {/* SUBMIT BUTTON (Bright Teal-Green) */}
+        {/* SUBMIT BUTTON */}
         <TouchableOpacity 
             activeOpacity={0.8} 
             style={styles.submitBtn} 
@@ -135,7 +136,7 @@ export default function UpgradePayment() {
         </TouchableOpacity>
 
         <Text style={styles.note}>
-            Verification may take up to 24 hours. Please keep your GCash receipt.
+            Verification may take up to 24 hours. Please keep your GCash receipt for reference.
         </Text>
       </ScrollView>
     </View>
@@ -143,107 +144,92 @@ export default function UpgradePayment() {
 }
 
 const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: "#FDFEFF",
-  },
+  page: { flex: 1, backgroundColor: "#FDFEFF" },
   scrollContent: {
     paddingHorizontal: 25,
     paddingBottom: 40,
     paddingTop: Platform.OS === 'ios' ? 50 : 20,
   },
-  header: {
-    marginBottom: 25,
-  },
+  header: { marginBottom: 25 },
   backCircle: {
-    width: 45,
-    height: 45,
-    borderRadius: 15,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     backgroundColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
-    elevation: 2,
+    elevation: 3,
     shadowColor: '#000',
     shadowOpacity: 0.1,
-    shadowRadius: 10,
+    shadowRadius: 8,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "900",
-    color: "#000",
-    letterSpacing: -0.5,
+  title: { 
+    fontSize: 25, 
+    fontWeight: "900", 
+    color: "#1E293B", 
+    letterSpacing: -0.5 
   },
-  subtitle: {
-    fontSize: 15,
-    color: "#64748B",
-    marginTop: 8,
-    lineHeight: 22,
+  subtitle: { 
+    fontSize: 14, 
+    color: "#64748B", 
+    marginTop: 6, 
+    lineHeight: 20 
   },
+  
   card: {
     backgroundColor: "#FFF",
-    borderRadius: 25,
-    padding: 24,
+    borderRadius: 22,
+    padding: 22,
     borderWidth: 1,
     borderColor: "#F1F5F9",
     elevation: 4,
     shadowColor: '#3fa796',
-    shadowOpacity: 0.05,
-    shadowRadius: 15,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
     marginBottom: 25,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
+  cardHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    marginBottom: 18 
   },
-  gcashLogo: {
-    width: 100,
-    height: 30,
-    resizeMode: "contain",
+  gcashLogo: { width: 90, height: 28, resizeMode: "contain" },
+  statusBadge: { 
+    backgroundColor: '#F0FDFA', 
+    paddingHorizontal: 10, 
+    paddingVertical: 4, 
+    borderRadius: 8 
   },
-  statusBadge: {
-    backgroundColor: '#F0FDFA',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+  statusText: { fontSize: 10, fontWeight: '800', color: '#3fa796' },
+  
+  infoRow: { marginBottom: 14 },
+  label: { 
+    color: "#94A3B8", 
+    fontSize: 11, 
+    fontWeight: '700', 
+    textTransform: 'uppercase', 
+    letterSpacing: 0.8, 
+    marginBottom: 4 
   },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#3fa796',
+  value: { fontSize: 18, fontWeight: "800", color: "#1E293B" },
+  numberContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between' 
   },
-  infoRow: {
-    marginBottom: 15,
+  copyBtn: {
+    padding: 4,
   },
-  label: {
-    color: "#94A3B8",
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
-  value: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#1E293B",
-  },
-  numberContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  form: {
-    marginBottom: 25,
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#1E293B",
-    marginBottom: 8,
-    marginLeft: 4,
+
+  form: { marginBottom: 25 },
+  inputLabel: { 
+    fontSize: 14, 
+    fontWeight: "700", 
+    color: "#1E293B", 
+    marginBottom: 8, 
+    marginLeft: 4 
   },
   inputWrapper: {
     flexDirection: 'row',
@@ -251,50 +237,36 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    borderRadius: 16,
+    borderRadius: 14,
     paddingHorizontal: 15,
-    height: 60,
-    marginBottom: 20,
+    height: 58, // Swak na size, hindi masyadong maliit
+    marginBottom: 18,
   },
-  currencyPrefix: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginRight: 10,
-  },
-  inputIcon: {
-    marginRight: 10,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: "#000",
-    fontWeight: "600",
-  },
+  currencyPrefix: { fontSize: 18, fontWeight: '700', color: '#1E293B', marginRight: 10 },
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, fontSize: 16, color: "#000", fontWeight: "600" },
+
   submitBtn: {
-    backgroundColor: "#3fa796", // Bright Teal-Green
-    height: 65,
-    borderRadius: 20,
+    backgroundColor: "#3fa796",
+    marginTop: -15,
+    height: 60, // Mas madaling i-tap
+    borderRadius: 18,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
+    elevation: 5,
     shadowColor: "#3fa796",
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
   },
-  submitText: {
-    color: "#FFF",
-    fontWeight: "800",
-    fontSize: 18,
+  submitText: { color: "#FFF", fontWeight: "800", fontSize: 17 },
+  note: { 
+    textAlign: 'center', 
+    fontSize: 12, 
+    color: '#94A3B8', 
+    marginTop: 20, 
+    paddingHorizontal: 15, 
+    lineHeight: 18 
   },
-  note: {
-    textAlign: 'center',
-    fontSize: 12,
-    color: '#94A3B8',
-    marginTop: 20,
-    paddingHorizontal: 20,
-    lineHeight: 18,
-  }
 });

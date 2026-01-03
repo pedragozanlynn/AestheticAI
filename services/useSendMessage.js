@@ -1,4 +1,3 @@
-// hooks/useSendMessage.js
 import {
   addDoc,
   collection,
@@ -6,26 +5,39 @@ import {
   serverTimestamp,
   setDoc,
 } from "firebase/firestore";
-import { db } from "../config/firebase";
+import { Alert } from "react-native";
+import { auth, db } from "../config/firebase";
 import { uploadToSupabase } from "./fileUploadService";
 
 /**
  * useSendMessage
- * - Sends text / file messages
- * - Updates chatRooms metadata (lastMessage, unread flags)
- * - Safe even if chatRoom does not exist yet
+ * - Pinatibay ang security sa pamamagitan ng pag-verify sa Firebase Auth session
  */
 export function useSendMessage({
   roomId,
-  senderId,
   senderType, // "user" | "consultant"
-  setMessages, // from ChatRoom screen (for optimistic UI)
+  setMessages, 
 }) {
+  
+  // Helper function para i-verify ang Auth
+  const getAuthenticatedId = () => {
+    const user = auth.currentUser;
+    if (!user) {
+      console.log("❌ Walang active Firebase Auth session.");
+      return null;
+    }
+    return user.uid;
+  };
+
   // ----------------------------
   // SEND TEXT MESSAGE
   // ----------------------------
   const sendTextMessage = async (text) => {
-    if (!text?.trim() || !roomId || !senderId) return;
+    const currentUid = getAuthenticatedId();
+    if (!text?.trim() || !roomId || !currentUid) {
+      if (!currentUid) Alert.alert("Session Expired", "Please log in again.");
+      return;
+    }
 
     const tempId = `temp-${Date.now()}`;
 
@@ -35,11 +47,12 @@ export function useSendMessage({
       {
         id: tempId,
         text,
-        senderId,
+        senderId: currentUid,
         senderType,
         type: "text",
         sending: true,
         failed: false,
+        createdAt: new Date(),
       },
     ]);
 
@@ -48,7 +61,7 @@ export function useSendMessage({
 
       const docRef = await addDoc(messagesRef, {
         text,
-        senderId,
+        senderId: currentUid,
         senderType,
         type: "text",
         createdAt: serverTimestamp(),
@@ -64,12 +77,14 @@ export function useSendMessage({
         )
       );
 
-      // 🔥 UPDATE / CREATE CHATROOM METADATA (SAFE)
+      // 🔥 UPDATE METADATA (Idinagdag ang Sender Info)
       await setDoc(
         doc(db, "chatRooms", roomId),
         {
           lastMessage: text,
           lastMessageAt: serverTimestamp(),
+          lastSenderId: currentUid,    // FIX: Idinagdag ito
+          lastSenderType: senderType,  // FIX: Idinagdag ito
           unreadForUser: senderType === "consultant",
           unreadForConsultant: senderType === "user",
         },
@@ -79,14 +94,12 @@ export function useSendMessage({
       return docRef.id;
     } catch (err) {
       console.log("❌ sendTextMessage failed:", err);
-
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === tempId
-            ? { ...m, sending: false, failed: true }
-            : m
+          m.id === tempId ? { ...m, sending: false, failed: true } : m
         )
       );
+      throw err;
     }
   };
 
@@ -94,17 +107,17 @@ export function useSendMessage({
   // SEND FILE / IMAGE MESSAGE
   // ----------------------------
   const sendFileMessage = async (file) => {
-    if (!file || !roomId || !senderId) return;
+    const currentUid = getAuthenticatedId();
+    if (!file || !roomId || !currentUid) return;
 
     const isImage = file.mimeType?.startsWith("image/");
     const tempId = `temp-file-${Date.now()}`;
 
-    // 🔹 Optimistic UI
     setMessages((prev) => [
       ...prev,
       {
         id: tempId,
-        senderId,
+        senderId: currentUid,
         senderType,
         type: isImage ? "image" : "file",
         fileName: file.name,
@@ -112,6 +125,7 @@ export function useSendMessage({
         localUri: file.uri,
         sending: true,
         failed: false,
+        createdAt: new Date(),
       },
     ]);
 
@@ -123,7 +137,7 @@ export function useSendMessage({
 
       const docRef = await addDoc(messagesRef, {
         text: uploaded.fileName,
-        senderId,
+        senderId: currentUid,
         senderType,
         type: isImage ? "image" : "file",
         fileUrl: uploaded.fileUrl,
@@ -133,7 +147,6 @@ export function useSendMessage({
         unsent: false,
       });
 
-      // 🔹 Replace temp message
       setMessages((prev) =>
         prev.map((m) =>
           m.id === tempId
@@ -141,7 +154,6 @@ export function useSendMessage({
                 ...m,
                 id: docRef.id,
                 sending: false,
-                failed: false,
                 fileUrl: uploaded.fileUrl,
                 localUri: null,
               }
@@ -149,12 +161,14 @@ export function useSendMessage({
         )
       );
 
-      // 🔥 UPDATE / CREATE CHATROOM METADATA
+      // 🔥 UPDATE METADATA (Idinagdag ang Sender Info)
       await setDoc(
         doc(db, "chatRooms", roomId),
         {
           lastMessage: isImage ? "📷 Image" : uploaded.fileName,
           lastMessageAt: serverTimestamp(),
+          lastSenderId: currentUid,    // FIX: Idinagdag ito
+          lastSenderType: senderType,  // FIX: Idinagdag ito
           unreadForUser: senderType === "consultant",
           unreadForConsultant: senderType === "user",
         },
@@ -164,14 +178,12 @@ export function useSendMessage({
       return docRef.id;
     } catch (err) {
       console.log("❌ sendFileMessage failed:", err);
-
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === tempId
-            ? { ...m, sending: false, failed: true }
-            : m
+          m.id === tempId ? { ...m, sending: false, failed: true } : m
         )
       );
+      throw err;
     }
   };
 

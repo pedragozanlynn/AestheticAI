@@ -18,11 +18,12 @@
       "supportsTablet": true,
       "backgroundColor": "#F0E7FF"
     },
-    "android": {
-      "package": "com.pedragozanlynn.aestheticai",
-      "icon": "./assets/icon.png",
-      "edgeToEdgeEnabled": true
-    },
+   "android": {
+  "package": "com.pedragozanlynn.aestheticai",
+  "icon": "./assets/icon.png",
+  "edgeToEdgeEnabled": false,
+  "softwareKeyboardLayoutMode": "resize"
+},
     "web": {
       "bundler": "metro",
       "output": "static",

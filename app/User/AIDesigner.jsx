@@ -10,6 +10,7 @@ import {
   View,
   Image,
   StatusBar,
+  SafeAreaView, // Idinagdag ang SafeAreaView
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import useSubscriptionType from "../../services/useSubscriptionType";
@@ -44,8 +45,12 @@ export default function AIDesigner() {
 
   return (
     <View style={styles.page}>
-      <StatusBar barStyle="dark-content" />
+      {/* Ginawang dark-content para itim ang icons at translucent=false para hindi mag-overlap */}
+      <StatusBar barStyle="dark-content" backgroundColor="#FFF" translucent={false} />
       
+      {/* SafeAreaView para sa iOS (Notch area) */}
+      <SafeAreaView style={{ backgroundColor: "#FFF" }} />
+
       <View style={styles.header}>
         <Text style={styles.headerTitle}>AI Interior Hub</Text>
         <Text style={styles.headerSubtitle}>Personalized design at your fingertips</Text>
@@ -132,7 +137,8 @@ const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: "#F8FAFC" },
   
   header: {
-    paddingTop: 60,
+    // Binawasan ang paddingTop dahil sa SafeAreaView/StatusBar adjustment
+    paddingTop: Platform.OS === 'android' ? 15 : 10,
     paddingHorizontal: 25,
     paddingBottom: 20,
     backgroundColor: "#FFF",

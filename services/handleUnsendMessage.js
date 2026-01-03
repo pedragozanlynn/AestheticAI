@@ -3,76 +3,69 @@ import { Alert } from "react-native";
 import { db } from "../config/firebase";
 import { deleteFromSupabase } from "./fileUploadService";
 
-export const handleUnsendMessage = async (msg, roomId, currentUserId, setMessages) => {
+/**
+ * Handle Unsend Message for both User and Consultant
+ */
+export const handleUnsendMessage = async (
+  msg,
+  roomId,
+  currentUserId,
+  setMessages
+) => {
+  // 1. Basic validation
   if (!msg || !roomId || !currentUserId || !msg.id) return;
 
-  console.log("🟢 handleUnsendMessage called");
-  console.log("🟢 roomId:", roomId);
-  console.log("🟢 currentUserId:", currentUserId);
-  console.log("🟢 msg.id:", msg.id);
-  console.log("🟢 msg.senderId:", msg.senderId);
-  console.log("🟢 msg.type:", msg.type);
+  // 2. CHECK PERMISSION
+  const isOwner = String(msg.senderId) === String(currentUserId);
 
-  if (msg.senderId !== currentUserId) {
-    console.log("❌ Current user is not the sender");
-    Alert.alert("Cannot Unsend", "Only the sender can unsend this message.");
+  if (!isOwner) {
+    // Isinalin sa English: Action Denied
+    Alert.alert("Action Denied", "You can only unsend your own messages.");
     return;
   }
 
-  Alert.alert("Unsend Message", "Are you sure you want to unsend this message?", [
+  // 3. CONFIRMATION ALERT (Isinalin sa English)
+  Alert.alert("Unsend Message", "Do you want to unsend this message?", [
     { text: "Cancel", style: "cancel" },
     {
       text: "Unsend",
       style: "destructive",
       onPress: async () => {
-        console.log("ℹ️ User confirmed unsend");
-
-        // Optimistic UI
-        setMessages(prev =>
-          prev.map(m =>
-            m.id === msg.id
-              ? { ...m, text: "Message unsent", unsent: true, unsentAt: new Date(), sending: false }
-              : m
-          )
-        );
+        // ✅ OPTIMISTIC UI
+        if (setMessages) {
+          setMessages(prev =>
+            prev.map(m =>
+              m.id === msg.id
+                ? { ...m, unsent: true, text: "Message unsent" }
+                : m
+            )
+          );
+        }
 
         try {
-          if (!msg.id.startsWith("temp-")) {
+          if (!msg.id.toString().startsWith("temp-")) {
             const msgRef = doc(db, "chatRooms", roomId, "messages", msg.id);
-
-            const snap = await getDoc(msgRef);
-            if (!snap.exists()) {
-              console.log("⚠️ Message does not exist in Firestore");
-              return;
-            }
-
-            const data = snap.data();
-            const payload = {
-              text: "Message unsent",
+            
+            // ✅ FIRESTORE UPDATE
+            await updateDoc(msgRef, {
               unsent: true,
+              text: "Message unsent",
               unsentAt: serverTimestamp(),
-            };
+            });
 
-            console.log("ℹ️ Updating Firestore with payload:", payload);
-            await updateDoc(msgRef, payload);
-            console.log("✅ Message successfully unsent in Firestore");
-          }
-
-          // Delete file if needed
-          if (msg.fileUrl && msg.type !== "text") {
-            try {
-              await deleteFromSupabase(msg.fileUrl);
-              console.log("ℹ️ Supabase file deleted:", msg.fileUrl);
-            } catch (err) {
-              console.log("⚠️ Supabase deletion failed:", err);
+            // ✅ SUPABASE DELETE
+            if (msg.fileUrl && (msg.type === "image" || msg.type === "file")) {
+              try {
+                await deleteFromSupabase(msg.fileUrl);
+              } catch (err) {
+                console.log("⚠️ Storage delete failed (Non-critical):", err);
+              }
             }
           }
         } catch (err) {
-          console.log("❌ Failed to unsend message:", err);
-          setMessages(prev =>
-            prev.map(m => (m.id === msg.id ? { ...m, failed: true } : m))
-          );
-          Alert.alert("Unsend Failed", "Please try again.");
+          console.error("❌ Failed to unsend message:", err);
+          // Isinalin sa English: Error message
+          Alert.alert("Error", "Could not unsend the message. Please check your connection.");
         }
       },
     },

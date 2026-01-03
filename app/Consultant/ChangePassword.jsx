@@ -84,8 +84,11 @@ export default function ConsultantChangePassword() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-      <SafeAreaView style={{ backgroundColor: "#FFF" }}>
+      {/* 1. Tinitiyak na ang status bar ay hindi translucent para hindi mag-overlap ang content */}
+      <StatusBar barStyle="dark-content" backgroundColor="#FFF" translucent={false} />
+      
+      {/* 2. SafeAreaView para sa iOS Notch at Android Top Spacing */}
+      <SafeAreaView style={styles.safeArea}>
         <View style={styles.headerRow}>
           <TouchableOpacity style={styles.backButton} onPress={router.back}>
             <Ionicons name="arrow-back" size={24} color="#1E293B" />
@@ -160,11 +163,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8FAFC",
   },
+  safeArea: {
+    backgroundColor: "#FFF",
+  },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 30,
+    // 3. Binawasan ang vertical padding mula 30 dahil sa SafeAreaView
+    paddingVertical: Platform.OS === 'android' ? 15 : 10,
     backgroundColor: "#FFF",
   },
   backButton: {

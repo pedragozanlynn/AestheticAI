@@ -14,7 +14,7 @@ import {
   View
 } from "react-native";
 import { auth, db } from "../../config/firebase";
-import Button from "../components/Button"; // adjust path kung saan mo nilagay
+import Button from "../components/Button";
 
 export default function Step3Review() {
   const router = useRouter();
@@ -22,6 +22,9 @@ export default function Step3Review() {
   const data = params.data ? JSON.parse(params.data) : {};
   const step2 = data.step2 || {};
   const [loading, setLoading] = useState(false);
+
+  // Variable para sa Dark Teal color
+  const iconColor = "#0F3E48";
 
   const handleSubmit = async () => {
     if (loading) return;
@@ -65,7 +68,6 @@ export default function Step3Review() {
 
   return (
     <ScrollView style={styles.container}>
-      {/* Header with image and back button */}
       <View style={styles.header}>
         <Image
           source={require("../../assets/new_background.jpg")}
@@ -81,110 +83,106 @@ export default function Step3Review() {
       </View>
 
       <View style={styles.content}>
-  {/* Personal Info */}
-  <View style={styles.card}>
-    <Text style={styles.section}>Personal Information</Text>
-    <View style={styles.infoRow}>
-      <Ionicons name="person" size={20} color="#912f56" style={styles.icon}/>
-      <Text style={styles.label}>Full Name</Text>
-      <Text style={styles.value}>{data.fullName}</Text>
-    </View>
-    <View style={styles.infoRow}>
-      <Ionicons name="mail" size={20} color="#912f56" style={styles.icon}/>
-      <Text style={styles.label}>Email</Text>
-      <Text style={styles.value}>{data.email}</Text>
-    </View>
-    <View style={styles.infoRow}>
-      <Ionicons name="home" size={20} color="#912f56" style={styles.icon}/>
-      <Text style={styles.label}>Address</Text>
-      <Text style={styles.value}>{data.address}</Text>
-    </View>
-    <View style={styles.infoRow}>
-      <Ionicons name="male-female" size={20} color="#912f56" style={styles.icon}/>
-      <Text style={styles.label}>Gender</Text>
-      <Text style={styles.value}>{data.gender}</Text>
-    </View>
-  </View>
-
-  {/* Consultant Details */}
-  <View style={styles.card}>
-    <Text style={styles.section}>Consultant Details</Text>
-    <View style={styles.infoRow}>
-      <Ionicons name="briefcase" size={20} color="#912f56" style={styles.icon}/>
-      <Text style={styles.label}>Type</Text>
-      <Text style={styles.value}>{data.consultantType}</Text>
-    </View>
-    <View style={styles.infoRow}>
-      <Ionicons name="construct" size={20} color="#912f56" style={styles.icon}/>
-      <Text style={styles.label}>Specialization</Text>
-      <Text style={styles.value}>{step2.specialization}</Text>
-    </View>
-    <View style={styles.infoRow}>
-      <Ionicons name="school" size={20} color="#912f56"style={styles.icon}/>
-      <Text style={styles.label}>Education</Text>
-      <Text style={styles.value}>{step2.education}</Text>
-    </View>
-    {data.consultantType === "Professional" && (
-      <>
-        <View style={styles.infoRow}>
-          <Ionicons name="time" size={20} color="#912f56"style={styles.icon}/>
-          <Text style={styles.label}>Experience</Text>
-          <Text style={styles.value}>{step2.experience} years</Text>
+        {/* Personal Info */}
+        <View style={styles.card}>
+          <Text style={styles.section}>Personal Information</Text>
+          <View style={styles.infoRow}>
+            <Ionicons name="person" size={20} color={iconColor} style={styles.icon}/>
+            <Text style={styles.label}>Full Name</Text>
+            <Text style={styles.value}>{data.fullName}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="mail" size={20} color={iconColor} style={styles.icon}/>
+            <Text style={styles.label}>Email</Text>
+            <Text style={styles.value}>{data.email}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="home" size={20} color={iconColor} style={styles.icon}/>
+            <Text style={styles.label}>Address</Text>
+            <Text style={styles.value}>{data.address}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="male-female" size={20} color={iconColor} style={styles.icon}/>
+            <Text style={styles.label}>Gender</Text>
+            <Text style={styles.value}>{data.gender}</Text>
+          </View>
         </View>
-        <View style={styles.infoRow}>
-          <Ionicons name="card" size={20} color="#912f56"style={styles.icon}/>
-          <Text style={styles.label}>License Number</Text>
-          <Text style={styles.value}>{step2.licenseNumber}</Text>
+
+        {/* Consultant Details */}
+        <View style={styles.card}>
+          <Text style={styles.section}>Consultant Details</Text>
+          <View style={styles.infoRow}>
+            <Ionicons name="briefcase" size={20} color={iconColor} style={styles.icon}/>
+            <Text style={styles.label}>Type</Text>
+            <Text style={styles.value}>{data.consultantType}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="construct" size={20} color={iconColor} style={styles.icon}/>
+            <Text style={styles.label}>Specialization</Text>
+            <Text style={styles.value}>{step2.specialization}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="school" size={20} color={iconColor} style={styles.icon}/>
+            <Text style={styles.label}>Education</Text>
+            <Text style={styles.value}>{step2.education}</Text>
+          </View>
+          {data.consultantType === "Professional" && (
+            <>
+              <View style={styles.infoRow}>
+                <Ionicons name="time" size={20} color={iconColor} style={styles.icon}/>
+                <Text style={styles.label}>Experience</Text>
+                <Text style={styles.value}>{step2.experience} years</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Ionicons name="card" size={20} color={iconColor} style={styles.icon}/>
+                <Text style={styles.label}>License Number</Text>
+                <Text style={styles.value}>{step2.licenseNumber}</Text>
+              </View>
+            </>
+          )}
         </View>
-      </>
-    )}
-  </View>
 
-  {/* Availability */}
-  <View style={styles.card}>
-    <Text style={styles.section}>Availability</Text>
-    {step2.availability && step2.availability.length > 0 ? (
-      step2.availability.map((day, i) => (
-        <View key={i} style={styles.infoRow}>
-          
-          <Ionicons name="calendar" size={20} color="#912f56" style={styles.icon}/>
-          <Text style={styles.label}>Day</Text>
-          <Text style={styles.value}>{day}</Text>
+        {/* Availability */}
+        <View style={styles.card}>
+          <Text style={styles.section}>Availability</Text>
+          {step2.availability && step2.availability.length > 0 ? (
+            step2.availability.map((day, i) => (
+              <View key={i} style={styles.infoRow}>
+                <Ionicons name="calendar" size={20} color={iconColor} style={styles.icon}/>
+                <Text style={styles.label}>Day</Text>
+                <Text style={styles.value}>{day}</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.value}>Not specified</Text>
+          )}
         </View>
-      ))
-    ) : (
-      <Text style={styles.value}>Not specified</Text>
-    )}
-  </View>
 
-  <View style={styles.card}>
-  <Text style={styles.section}>Portfolio</Text>
-  {step2.portfolioLink ? (
-    <TouchableOpacity style={styles.portfolioButton} onPress={() => Linking.openURL(step2.portfolioLink)}>
-      <Ionicons name="document-text" size={22} color="#fff" style={{ marginRight: 8 }}/>
-      <Text style={styles.portfolioButtonText}>Open Portfolio File</Text>
-    </TouchableOpacity>
-  ) : (
-    <Text style={styles.value}>No portfolio file uploaded</Text>
-  )}
-</View>
+        <View style={styles.card}>
+          <Text style={styles.section}>Portfolio</Text>
+          {step2.portfolioLink ? (
+            <TouchableOpacity style={styles.portfolioButton} onPress={() => Linking.openURL(step2.portfolioLink)}>
+              <Ionicons name="document-text" size={22} color="#fff" style={{ marginRight: 8 }}/>
+              <Text style={styles.portfolioButtonText}>Open Portfolio File</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.value}>No portfolio file uploaded</Text>
+          )}
+        </View>
 
-  <Button
-  title="Submit"
-  type="primary"
-  onPress={handleSubmit}
-  loading={loading}
-/>
-</View>
-
-
+        <Button
+          title="Submit"
+          type="primary"
+          onPress={handleSubmit}
+          loading={loading}
+        />
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-
   header: { width: "100%", height: 250, position: "relative" },
   image: { width: "100%", height: "100%", resizeMode: "cover" },
   backButton: {
@@ -224,7 +222,6 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
-
   content: {
     flex: 1,
     paddingHorizontal: 32,
@@ -265,12 +262,11 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, color: "#666", flex: 1 },
   value: { 
     fontSize: 14, 
-    color: "#4A4A4A",   // medium gray, readable pero hindi matingkad
+    color: "#4A4A4A", 
     fontWeight: "400", 
     flex: 1, 
     textAlign: "right" 
   },
-    link: { color: "#0F3E48", textDecorationLine: "underline", fontWeight: "600" },
   portfolioButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -289,5 +285,4 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 14,
   },
- 
 });
