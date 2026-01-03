@@ -16,13 +16,18 @@ app.use((req, res, next) => {
 const COLAB_URL = "https://baggiest-sterigmatic-kandi.ngrok-free.dev";
 
 app.post('/api/redesign-room', upload.single('photo'), async (req, res) => {
+    console.log("-----------------------------------------");
+    console.log("📸 RECEIVED: Request from Phone");
+    console.log("📂 FILE: ", req.file ? req.file.originalname : "No file found");
+    console.log("✍️ PROMPT: ", req.body.prompt);
+
     try {
         // req.file contains the image sent from your phone
         if (!req.file) {
             return res.status(400).send('No photo uploaded.');
         }
 
-        console.log("Image received. Forwarding to AI in Colab...");
+        console.log("🚀 SENDING: Forwarding to Google Colab AI...");
 
         // 2. Prepare the data to send to Colab
         const form = new FormData();

@@ -5,6 +5,7 @@ import {
   doc,
   getDoc,
   serverTimestamp,
+  Timestamp,
 } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
@@ -20,10 +21,18 @@ const PRIMARY = "#2c4f4f";
 
 export default function BookConsultation() {
   const router = useRouter();
-  const { consultantId, date, time, notes } = useLocalSearchParams();
+
+  // ✅ RECEIVE appointmentAt (ISO STRING)
+  const { consultantId, appointmentAt, notes, fee } =
+    useLocalSearchParams();
 
   const [consultant, setConsultant] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // ✅ Convert ISO → Date
+  const appointmentDate = appointmentAt
+    ? new Date(appointmentAt)
+    : null;
 
   /* ================= FETCH CONSULTANT ================= */
   useEffect(() => {
@@ -51,8 +60,8 @@ export default function BookConsultation() {
   /* ================= CONFIRM BOOKING ================= */
   const handleConfirm = async () => {
     try {
-      if (!consultant?.id) {
-        alert("Consultant not found.");
+      if (!consultant?.id || !appointmentDate) {
+        alert("Invalid appointment data.");
         return;
       }
 
@@ -61,18 +70,22 @@ export default function BookConsultation() {
       await addDoc(collection(db, "appointments"), {
         consultantId: consultant.id,
         userId,
-        date,
-        time,
+
+        // ✅ SINGLE SOURCE OF TRUTH
+        appointmentAt: Timestamp.fromDate(appointmentDate),
+
         notes: notes || "",
+        sessionFee: Number(fee) || 0,
+
         status: "pending",
         createdAt: serverTimestamp(),
       });
 
-      alert("Appointment request sent!");
+      alert("Appointment successfully booked!");
       router.replace("/User/Home");
     } catch (err) {
       console.log("❌ Error saving appointment:", err);
-      alert("Failed to send request.");
+      alert("Failed to book appointment.");
     }
   };
 
@@ -85,10 +98,10 @@ export default function BookConsultation() {
     );
   }
 
-  if (!consultant) {
+  if (!consultant || !appointmentDate) {
     return (
       <View style={styles.center}>
-        <Text>Consultant not found.</Text>
+        <Text>Invalid appointment details.</Text>
       </View>
     );
   }
@@ -114,9 +127,21 @@ export default function BookConsultation() {
       <View style={styles.card}>
         <Text style={styles.section}>Schedule</Text>
 
-        <Info label="Date" value={date} />
-        <Info label="Time" value={time} />
-        <Info label="Notes" value={notes || "No message provided"} />
+        <Info
+          label="Date"
+          value={appointmentDate.toLocaleDateString()}
+        />
+        <Info
+          label="Time"
+          value={appointmentDate.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        />
+        <Info
+          label="Notes"
+          value={notes || "No message provided"}
+        />
       </View>
 
       {/* CTA */}
@@ -173,9 +198,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#E1E8EA",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
     elevation: 2,
   },
 
@@ -208,10 +230,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 16,
     marginTop: 10,
-    shadowColor: PRIMARY,
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
   },
 
   buttonText: {
@@ -219,6 +237,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 17,
     fontWeight: "800",
-    letterSpacing: 0.5,
   },
 });

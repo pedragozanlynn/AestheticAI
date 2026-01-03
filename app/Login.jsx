@@ -31,7 +31,11 @@ export default function Login() {
 
   const unsubscribeProfileRef = useRef(null);
 
-  /* ================= CREATE ACCOUNT (FIX ONLY) ================= */
+  /* ================= ROLE LABEL ================= */
+  const roleLabel =
+    initialRole === "consultant" ? "Consultant" : "User";
+
+  /* ================= CREATE ACCOUNT ================= */
   const goToRegister = () => {
     if (initialRole === "consultant") {
       router.push("/Consultant/Step1Register");
@@ -101,22 +105,15 @@ export default function Login() {
 
       if (initialRole === "consultant") {
         if (profile.status === "pending") {
-          Alert.alert(
-            "Pending Approval",
-            "Please wait for admin approval."
-          );
+          Alert.alert("Pending Approval", "Please wait for admin approval.");
           return;
         }
         if (profile.status === "rejected") {
-          Alert.alert(
-            "Registration Rejected",
-            "Please contact admin."
-          );
+          Alert.alert("Registration Rejected", "Please contact admin.");
           return;
         }
       }
 
-      /* 🔥 REQUIRED FOR ONLINE / OFFLINE PRESENCE */
       await AsyncStorage.setItem("aestheticai:current-user-id", uid);
       await AsyncStorage.setItem(
         "aestheticai:current-user-role",
@@ -177,7 +174,12 @@ export default function Login() {
 
         <View style={styles.headerTextContainer}>
           <Text style={styles.title}>Welcome Back</Text>
-          <Text style={styles.subtitle}>Sign in to continue</Text>
+
+          {/* ✅ HIGHLIGHTED ROLE */}
+          <Text style={styles.subtitle}>
+            Sign in to continue as{" "}
+            <Text style={styles.roleHighlight}>{roleLabel}</Text>
+          </Text>
         </View>
       </View>
 
@@ -204,7 +206,6 @@ export default function Login() {
 
         <Button title="Login" onPress={login} />
 
-        {/* ✅ CREATE ACCOUNT */}
         <View style={{ marginTop: 20, alignItems: "center" }}>
           <TouchableOpacity onPress={goToRegister}>
             <Text style={{ color: "#01579B", fontWeight: "700" }}>
@@ -240,6 +241,14 @@ const styles = StyleSheet.create({
 
   title: { fontSize: 30, fontWeight: "800", color: "#fff" },
   subtitle: { fontSize: 14, color: "#eee", marginTop: 6 },
+
+  /* ✅ ROLE HIGHLIGHT */
+  roleHighlight: {
+    color: "#F3F9FA",
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    fontSize: 18,
+  },
 
   content: {
     flex: 1,

@@ -2,16 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
-import {
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  orderBy,
-  query,
-  where,
-} from "firebase/firestore";
-import { useEffect, useRef, useState } from "react";
+import { doc, getDoc } from "firebase/firestore";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Dimensions,
@@ -30,32 +22,65 @@ const { width } = Dimensions.get("window");
 const CARD_WIDTH = width * 0.7;
 const PROFILE_KEY_PREFIX = "aestheticai:user-profile:";
 
+/* ================= TIP OF THE DAY DATA ================= */
+
+const DESIGN_INSPIRATIONS = [
+  { title: "Warm Minimalism", tip: "Use neutral colors with natural wood to create a calm, cozy space." },
+  { title: "Small Space Trick", tip: "Mirrors help small rooms feel bigger and brighter." },
+  { title: "Color Balance", tip: "Stick to one main color and two supporting tones for harmony." },
+  { title: "Lighting Matters", tip: "Layer lighting (ambient, task, accent) for a more premium feel." },
+  { title: "Texture Upgrade", tip: "Mix textures like wood, fabric, and metal to add depth." },
+];
+
 export default function Home() {
   const router = useRouter();
   const [profile, setProfile] = useState(null);
   const [rooms, setRooms] = useState([]);
-  const [nextConsultation, setNextConsultation] = useState(null);
+  const [tipOfTheDay, setTipOfTheDay] = useState(null);
   const subType = useSubscriptionType();
+
   const scrollRef = useRef(null);
+  const carouselIndex = useRef(0); // ✅ DOES NOT CAUSE RE-RENDER
 
-  /* ================= CONSULTATION PREVIEW ================= */
-  useEffect(() => {
-    if (!auth.currentUser) return;
+  const carouselImages = [
+    require("../../assets/carousel1.jpg"),
+    require("../../assets/carousel2.jpg"),
+    require("../../assets/carousel3.png"),
+  ];
 
-    const q = query(
-      collection(db, "appointments"),
-      where("userId", "==", auth.currentUser.uid),
-      orderBy("date", "asc")
-    );
+  /* ================= TIP OF THE DAY ================= */
+  const loadTipOfTheDay = async () => {
+    const todayKey = `tip-${new Date().toDateString()}`;
+    const saved = await AsyncStorage.getItem(todayKey);
 
-    return onSnapshot(q, (snap) => {
-      const parsed = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setNextConsultation(parsed[0] || null);
-    });
-  }, []);
+    if (saved) {
+      setTipOfTheDay(JSON.parse(saved));
+    } else {
+      const index = new Date().getDate() % DESIGN_INSPIRATIONS.length;
+      const tip = DESIGN_INSPIRATIONS[index];
+      setTipOfTheDay(tip);
+      await AsyncStorage.setItem(todayKey, JSON.stringify(tip));
+    }
+  };
 
   const isPremium = subType === "Premium";
 
+  /* ================= AUTO CAROUSEL (FIX ONLY) ================= */
+  useEffect(() => {
+    const interval = setInterval(() => {
+      carouselIndex.current =
+        (carouselIndex.current + 1) % carouselImages.length;
+
+      scrollRef.current?.scrollTo({
+        x: carouselIndex.current * (width - 32),
+        animated: true,
+      });
+    }, 3500);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  /* ================= NAVIGATION ================= */
   const goToConsultations = () => {
     if (!isPremium) {
       Alert.alert(
@@ -98,7 +123,7 @@ export default function Home() {
     };
 
     /* ================= LOAD PROFILE ================= */
-    const loadProfile = async (user) => {
+    const fetchProfile = async (user) => {
       try {
         const currentUser = user || auth.currentUser;
         if (!currentUser) return;
@@ -119,12 +144,11 @@ export default function Home() {
     };
 
     fetchRooms();
+    loadTipOfTheDay();
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        loadProfile(user);
-      } else {
-        router.replace("/User/Login");
+        fetchProfile(user);
       }
     });
     return unsubscribe;
@@ -142,7 +166,7 @@ export default function Home() {
           </View>
         </View>
 
-        {/* ===== CAROUSEL ===== */}
+        {/* ===== AUTO CAROUSEL ===== */}
         <View style={styles.carouselWrap}>
           <ScrollView
             ref={scrollRef}
@@ -150,11 +174,7 @@ export default function Home() {
             pagingEnabled
             showsHorizontalScrollIndicator={false}
           >
-            {[
-              require("../../assets/carousel1.jpg"),
-              require("../../assets/carousel2.jpg"),
-              require("../../assets/carousel3.png"),
-            ].map((img, i) => (
+            {carouselImages.map((img, i) => (
               <View key={i} style={styles.carouselCard}>
                 <Image source={img} style={styles.carouselImage} />
               </View>
@@ -162,63 +182,35 @@ export default function Home() {
           </ScrollView>
         </View>
 
-        {/* ===== QUICK ACTIONS (RESTORED) ===== */}
+        {/* ===== QUICK ACTIONS ===== */}
         <View style={styles.quickActions}>
-          <Action
-            bg={styles.actionCardTeal}
-            icon={require("../../assets/design.png")}
-            label="Design with AI"
-            onPress={goToDesignAI}
-          />
-          <Action
-            bg={styles.actionCardPink}
-            icon={require("../../assets/customize.png")}
-            label="Customize"
-            onPress={goToCustomize}
-          />
-          <Action
-            bg={styles.actionCardPurple}
-            icon={require("../../assets/consultation.png")}
-            label="Consultation"
-            onPress={goToConsultations}
-          />
+          <Action bg={styles.actionCardTeal} icon={require("../../assets/design.png")} label="Design with AI" onPress={goToDesignAI} />
+          <Action bg={styles.actionCardPink} icon={require("../../assets/customize.png")} label="Customize with AI" onPress={goToCustomize} />
+          <Action bg={styles.actionCardPurple} icon={require("../../assets/consultation.png")} label="Consultation" onPress={goToConsultations} />
         </View>
 
-        {/* ===== CONSULTATION PREVIEW ===== */}
-        {nextConsultation && (
+        {/* ===== TIP OF THE DAY ===== */}
+        {tipOfTheDay && (
           <>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Consultation</Text>
+              <Text style={styles.sectionTitle}>Tip of the Day</Text>
             </View>
-
-            <View style={styles.consultPreview}>
-              <View>
-                <Text style={styles.consultTitle}>Upcoming Consultation</Text>
-                <Text style={styles.consultSub}>
-                  {nextConsultation.date} @ {nextConsultation.time}
-                </Text>
+            <View style={styles.tipCard}>
+              <View style={styles.tipHeader}>
+                <Ionicons name="bulb" size={18} color="#8f2f52" />
+                <Text style={styles.tipTitle}>{tipOfTheDay.title}</Text>
               </View>
-
-              <TouchableOpacity
-                style={styles.consultBtn}
-                onPress={goToConsultations}
-              >
-                <Text style={styles.consultBtnText}>View</Text>
-              </TouchableOpacity>
+              <Text style={styles.tipText}>{tipOfTheDay.tip}</Text>
             </View>
           </>
         )}
 
-        {/* ===== RECENT PROJECTS (HORIZONTAL) ===== */}
+        {/* ===== RECENT PROJECTS ===== */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent Projects</Text>
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.projectsRow}
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.projectsRow}>
           {rooms.map((room) => (
             <View key={room.id} style={styles.projectCard}>
               <Image source={room.image} style={styles.projectImage} />
@@ -229,12 +221,8 @@ export default function Home() {
             </View>
           ))}
 
-          {/* VIEW ALL */}
-          <TouchableOpacity
-            style={[styles.projectCard, styles.viewAllCard]}
-            onPress={goToProjects}
-          >
-            <Ionicons name="grid-outline" size={28} color="#2c4f4f" />
+          <TouchableOpacity style={[styles.projectCard, styles.viewAllCard]} onPress={goToProjects}>
+            <Ionicons name="grid" size={28} color="#2c4f4f" />
             <Text style={styles.viewAllText}>View All</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -253,18 +241,17 @@ const Action = ({ bg, icon, label, onPress }) => (
   </TouchableOpacity>
 );
 
-/* ================= STYLES ================= */
+/* ================= STYLES (UNCHANGED) ================= */
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: "#F3F9FA" },
-
   header: {
     backgroundColor: "#01579B",
-    paddingTop: 70,
+    paddingTop: 50,
     paddingHorizontal: 20,
-    paddingBottom: 90,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    paddingBottom: 70,
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 10,
   },
   greet: { color: "#FFF", fontSize: 18 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
@@ -279,7 +266,6 @@ const styles = StyleSheet.create({
   },
   carouselImage: { width: "100%", height: "100%" },
 
-  /* QUICK ACTIONS */
   quickActions: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -302,20 +288,24 @@ const styles = StyleSheet.create({
   actionText: { fontWeight: "900", fontSize: 11 },
 
   sectionHeader: { marginHorizontal: 16, marginBottom: 10 },
-  sectionTitle: { fontSize: 18, fontWeight: "800", color: "#2c4f4f" },
-
-  consultPreview: {
-    backgroundColor: "#E8F5E9",
+  sectionTitle: { fontSize: 15, fontWeight: "800", color: "#2c4f4f", marginTop: -10, },
+  tipCard: {
+    backgroundColor: "#FFFFFF",
     marginHorizontal: 16,
-    padding: 14,
+    padding: 30,
     borderRadius: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
-  },
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: "#8f2f52",
+    elevation: 2,
+    marginLeft: 20,
+    marginRight: 20,
 
-  /* PROJECTS */
+  },
+  tipHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
+  tipTitle: { fontSize: 15, fontWeight: "800", color: "#8f2f52" },
+  tipText: { fontSize: 13, color: "#444", lineHeight: 18 },
+
   projectsRow: { paddingLeft: 16, paddingBottom: 80 },
   projectCard: {
     width: CARD_WIDTH,

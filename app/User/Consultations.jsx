@@ -3,13 +3,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
-  orderBy,
   query,
   where,
+  updateDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
@@ -22,75 +22,97 @@ import {
 } from "react-native";
 import { db } from "../../config/firebase";
 
+/* ================= SAFE TIME PARSER (AM / PM OK) ================= */
+
+const parseLegacyDateTime = (dateStr, timeStr) => {
+  try {
+    if (!dateStr || !timeStr) return null;
+
+    const [time, modifier] = timeStr.replace(/\u202F/g, " ").split(" ");
+    let [h, m] = time.split(":").map(Number);
+
+    if (modifier === "PM" && h < 12) h += 12;
+    if (modifier === "AM" && h === 12) h = 0;
+
+    const [y, mo, d] = dateStr.split("-").map(Number);
+    return new Date(y, mo - 1, d, h, m || 0);
+  } catch {
+    return null;
+  }
+};
+
+/* ================= STATUS LOGIC (BULLETPROOF) ================= */
+
+const getStatus = (item) => {
+  if (item.status === "cancelled") return "cancelled";
+
+  let start =
+    item.appointmentAt?.toDate?.() ||
+    parseLegacyDateTime(item.date, item.time);
+
+  if (!start) return "upcoming";
+
+  const now = new Date();
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+
+  if (now < start) return "upcoming";
+  if (now >= start && now <= end) return "ongoing";
+  return "past";
+};
+
 export default function Consultations() {
   const [consultations, setConsultations] = useState([]);
   const [consultantMap, setConsultantMap] = useState({});
-  const [activeTab, setActiveTab] = useState("ongoing");
+  const [activeTab, setActiveTab] = useState("upcoming");
   const router = useRouter();
 
-  /* ================= TIME HELPERS ================= */
-
-  const parseTime = (dateStr, timeStr) => {
-    if (!dateStr || !timeStr) return null;
-    try {
-      const [timePart, modifier] = timeStr.replace(/\u202F/g, " ").trim().split(" ");
-      let [hours, minutes] = timePart.split(":").map(Number);
-      minutes = minutes || 0;
-
-      if (modifier?.toUpperCase() === "PM" && hours < 12) hours += 12;
-      if (modifier?.toUpperCase() === "AM" && hours === 12) hours = 0;
-
-      const [year, month, day] = dateStr.split("-").map(Number);
-      return new Date(year, month - 1, day, hours, minutes);
-    } catch {
-      return null;
-    }
-  };
-
-  const getStatus = (dateStr, timeStr) => {
-    const now = new Date();
-    const start = parseTime(dateStr, timeStr);
-    if (!start) return "upcoming";
-    if (now >= start && now <= new Date(start.getTime() + 60 * 60 * 1000))
-      return "ongoing";
-    if (now > start) return "past";
-    return "upcoming";
-  };
-
-  /* ================= LOAD CONSULTATIONS ================= */
+  /* ================= LOAD CONSULTATIONS (FIXED) ================= */
 
   useEffect(() => {
+    let unsub;
+
     const load = async () => {
       const userId = await AsyncStorage.getItem("userUid");
       if (!userId) return;
 
+      // ❌ NO orderBy("date") – STRING DATE BUG FIXED
       const q = query(
         collection(db, "appointments"),
-        where("userId", "==", userId),
-        orderBy("date", "desc")
+        where("userId", "==", userId)
       );
 
-      return onSnapshot(q, async (snapshot) => {
-        const items = snapshot.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            ...data,
-            status: getStatus(data.date, data.time),
-          };
-        });
+      unsub = onSnapshot(q, async (snap) => {
+        const items = snap.docs
+          .map((d) => {
+            const data = d.data();
+            const sortTime =
+              data.appointmentAt?.toDate?.() ||
+              parseLegacyDateTime(data.date, data.time);
+
+            return {
+              id: d.id,
+              ...data,
+              computedStatus: getStatus(data),
+              _sortTime: sortTime,
+            };
+          })
+          // ✅ REAL DATE SORT (CLIENT SIDE)
+          .sort((a, b) => {
+            if (!a._sortTime || !b._sortTime) return 0;
+            return b._sortTime - a._sortTime;
+          });
 
         setConsultations(items);
 
-        // 🔥 LOAD CONSULTANT NAMES PROPERLY
+        // Load consultant names
         const map = {};
         await Promise.all(
-          items.map(async (item) => {
-            if (item.consultantId && !map[item.consultantId]) {
-              const snap = await getDoc(doc(db, "consultants", item.consultantId));
-              if (snap.exists()) {
-                map[item.consultantId] = snap.data().fullName;
-              }
+          items.map(async (i) => {
+            if (i.consultantId && !map[i.consultantId]) {
+              const s = await getDoc(
+                doc(db, "consultants", i.consultantId)
+              );
+              if (s.exists()) map[i.consultantId] = s.data().fullName;
             }
           })
         );
@@ -99,6 +121,7 @@ export default function Consultations() {
     };
 
     load();
+    return () => unsub && unsub();
   }, []);
 
   /* ================= ACTIONS ================= */
@@ -109,38 +132,35 @@ export default function Consultations() {
       {
         text: "Yes",
         onPress: async () => {
-          await deleteDoc(doc(db, "appointments", id));
+          await updateDoc(doc(db, "appointments", id), {
+            status: "cancelled",
+            cancelledAt: serverTimestamp(),
+            cancelledBy: "user",
+          });
         },
       },
     ]);
   };
 
-  const handleOpenChat = (room) => {
-    router.push({
-      pathname: "/User/ChatRoom",
-      params: {
-        roomId: room.chatRoomId,
-        consultantId: room.consultantId,
-        appointmentId: room.id,
-        appointmentDate: room.date,
-        appointmentTime: room.time,
-        consultantName: consultantMap[room.consultantId],
-      },
-    });
-  };
+  /* ================= FILTER ================= */
+
+  const filtered = consultations.filter(
+    (c) => c.computedStatus === activeTab
+  );
 
   /* ================= RENDER ITEM ================= */
 
   const renderItem = ({ item }) => {
-    const statusColor =
-      item.status === "ongoing"
-        ? "#4CAF50"
-        : item.status === "upcoming"
-        ? "#FF9800"
-        : "#9E9E9E";
+    const status = item.computedStatus;
 
-    const consultantName =
-      consultantMap[item.consultantId] || "Consultant";
+    const statusColor =
+      status === "ongoing"
+        ? "#4CAF50"
+        : status === "upcoming"
+        ? "#FF9800"
+        : status === "cancelled"
+        ? "#F44336"
+        : "#9E9E9E";
 
     return (
       <View style={styles.item}>
@@ -149,43 +169,33 @@ export default function Consultations() {
             <View style={styles.avatarCircle}>
               <Ionicons name="person" size={18} color="#0F3E48" />
             </View>
-            <Text style={styles.consultantName}>{consultantName}</Text>
+            <Text style={styles.consultantName}>
+              {consultantMap[item.consultantId] || "Consultant"}
+            </Text>
           </View>
 
           <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-            <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+            <Text style={styles.statusText}>{status.toUpperCase()}</Text>
           </View>
         </View>
 
         <Text style={styles.details}>
-          {item.date} @ {item.time}
+          {item.appointmentAt?.toDate
+            ? item.appointmentAt.toDate().toLocaleString()
+            : `${item.date} @ ${item.time}`}
         </Text>
 
-        {item.status === "ongoing" && (
+        {status === "upcoming" && (
           <TouchableOpacity
-            style={styles.chatButton}
-            onPress={() => handleOpenChat(item)}
+            style={styles.cancelButton}
+            onPress={() => handleCancel(item.id)}
           >
-            <Text style={styles.chatText}>Open Chat</Text>
+            <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
-        )}
-
-        {/* ✅ CANCEL BUTTON NASA PINAKABABA */}
-        {item.status === "upcoming" && (
-          <View style={{ marginTop: 10 }}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => handleCancel(item.id)}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
         )}
       </View>
     );
   };
-
-  const filtered = consultations.filter((c) => c.status === activeTab);
 
   /* ================= UI ================= */
 
@@ -205,34 +215,44 @@ export default function Consultations() {
           </View>
         </View>
 
-        <TouchableOpacity
-          onPress={() => router.push("/User/Consultants")}
-          style={styles.iconBtn}
-        >
-          <Ionicons name="people" size={25} color="#0F3E48" />
-        </TouchableOpacity>
+        <View style={styles.iconGroup}>
+  <TouchableOpacity
+    style={styles.iconBtn}
+    onPress={() => router.push("/User/Consultants")}
+  >
+    <Ionicons name="people" size={24} color="#0F3E48" />
+  </TouchableOpacity>
+
+  <TouchableOpacity
+    style={styles.iconBtn}
+    onPress={() => router.push("/User/ChatList")}
+  >
+    <Ionicons name="chatbubble-ellipses" size={24} color="#0F3E48" />
+  </TouchableOpacity>
+</View>
+
       </View>
 
       <View style={styles.headerDivider} />
 
       {/* ===== TABS ===== */}
       <View style={styles.tabContainer}>
-        {["upcoming", "ongoing", "past"].map((tab) => (
+        {["upcoming", "ongoing", "past", "cancelled"].map((t) => (
           <TouchableOpacity
-            key={tab}
-            onPress={() => setActiveTab(tab)}
+            key={t}
+            onPress={() => setActiveTab(t)}
             style={[
               styles.tabButton,
-              activeTab === tab && styles.activeTabButton,
+              activeTab === t && styles.activeTabButton,
             ]}
           >
             <Text
               style={[
                 styles.tabText,
-                activeTab === tab && styles.activeTabText,
+                activeTab === t && styles.activeTabText,
               ]}
             >
-              {tab.toUpperCase()}
+              {t.toUpperCase()}
             </Text>
           </TouchableOpacity>
         ))}
@@ -240,9 +260,8 @@ export default function Consultations() {
 
       <FlatList
         data={filtered}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(i) => i.id}
         renderItem={renderItem}
-        contentContainerStyle={{ paddingBottom: 40 }}
         ListEmptyComponent={
           <Text style={styles.emptyText}>No consultations found.</Text>
         }
@@ -275,21 +294,32 @@ const styles = StyleSheet.create({
   },
   chatTitle: { fontSize: 18, fontWeight: "800", color: "#0F3E48" },
   chatSubtitle: { fontSize: 12, color: "#777" },
-  iconBtn: {
-    padding: 6,
-    borderRadius: 20,
-    backgroundColor: "#FFF",
-    elevation: 2,
+
+  iconGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2, // adjust mo kung mas dikit o mas malayo
   },
-  headerDivider: { height: 1, backgroundColor: "#E4E6EB", marginBottom: 12 },
+  iconBtn:{
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.15)",
+  
+  },
+ 
+  headerDivider: {
+    height: 1,
+    backgroundColor: "#E4E6EB",
+    marginBottom: 12,
+  },
 
   tabContainer: {
     flexDirection: "row",
     justifyContent: "space-around",
     marginBottom: 12,
   },
-  tabButton: { paddingVertical: 6, paddingHorizontal: 14 },
-  tabText: { fontSize: 13, fontWeight: "700", color: "#999" },
+  tabButton: { paddingVertical: 6 },
+  tabText: { fontWeight: "700", color: "#999" },
   activeTabButton: { borderBottomWidth: 2, borderBottomColor: "#0F3E48" },
   activeTabText: { color: "#0F3E48" },
 
@@ -303,7 +333,6 @@ const styles = StyleSheet.create({
   itemHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 6,
   },
   identityRow: { flexDirection: "row", alignItems: "center" },
   avatarCircle: {
@@ -315,31 +344,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 8,
   },
-  consultantName: { fontSize: 16, fontWeight: "700", color: "#0F3E48" },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
-  statusText: { color: "#FFF", fontSize: 12, fontWeight: "700" },
-  details: { fontSize: 14, color: "#555", marginBottom: 6 },
+  consultantName: { fontWeight: "700", color: "#0F3E48" },
+  statusBadge: { paddingHorizontal: 8, borderRadius: 10 },
+  statusText: { color: "#FFF", fontWeight: "700", fontSize: 12 },
+  details: { marginTop: 6, color: "#555" },
 
   cancelButton: {
     backgroundColor: "#F44336",
     padding: 6,
     borderRadius: 6,
-    marginTop: -15,
     alignSelf: "flex-end",
+    marginTop: 8,
   },
   cancelText: { color: "#FFF", fontWeight: "700" },
 
-  chatButton: {
-    backgroundColor: "#4CAF50",
-    padding: 6,
-    borderRadius: 6,
-    alignSelf: "flex-start",
-  },
-  chatText: { color: "#FFF", fontWeight: "700" },
-
-  emptyText: {
-    textAlign: "center",
-    marginTop: 20,
-    color: "#888",
-  },
+  emptyText: { textAlign: "center", marginTop: 30, color: "#999" },
 });

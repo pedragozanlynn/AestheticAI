@@ -133,6 +133,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: "#01579B",
     padding: 18,
+    paddingTop: 30,
   },
   headerText: { color: "#fff", fontSize: 22, fontWeight: "800" },
   headerSub: { color: "#E0F7FA", marginTop: 4 },

@@ -34,10 +34,12 @@ export default function Login() {
       {/* Header with background image */}
       <View style={styles.header}>
         <Image source={require("../../assets/new_background.jpg")} style={styles.image} />
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={26} color="#FFFFFF" />
-        </TouchableOpacity>
-
+<TouchableOpacity 
+  onPress={() => router.replace("/")} // Ito ang magpapabalik sa index page
+  style={styles.backButton}
+>
+  <Ionicons name="arrow-back" size={26} color="#FFFFFF" />
+</TouchableOpacity>
         <View style={styles.headerTextContainer}>
           <Text style={styles.title}>Admin Login</Text>
           <Text style={styles.subtitle}>Sign in to access the dashboard</Text>

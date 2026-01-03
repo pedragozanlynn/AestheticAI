@@ -1,281 +1,324 @@
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { signOut } from "firebase/auth";
+import { collection, getDocs } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Dimensions,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
+  StatusBar,
+  SafeAreaView
 } from "react-native";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "../../config/firebase";
+import { LineChart, PieChart } from "react-native-chart-kit";
+import { auth, db } from "../../config/firebase";
 import BottomNavbar from "../components/BottomNav";
-import { Ionicons } from "@expo/vector-icons";
+
+const screenWidth = Dimensions.get("window").width;
 
 export default function Dashboard() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [totalUsers, setTotalUsers] = useState(0);
   const [totalConsultants, setTotalConsultants] = useState(0);
-  const [pendingConsultants, setPendingConsultants] = useState(0);
-  const [approvedConsultants, setApprovedConsultants] = useState(0);
-  const [rejectedConsultants, setRejectedConsultants] = useState(0);
-  const [totalSubscriptionRevenue, setTotalSubscriptionRevenue] = useState(0);
-  const [totalConsultationRevenue, setTotalConsultationRevenue] = useState(0);
-  const [recentPayments, setRecentPayments] = useState([]);
+  const [conTrend, setConTrend] = useState([0, 0, 0, 0]);
+  const [grandTotalSubs, setGrandTotalSubs] = useState(0);
+  const [grandTotalAdmin, setGrandTotalAdmin] = useState(0);
+  const [payments, setPayments] = useState([]);
+  const [activeTab, setActiveTab] = useState("all");
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  const handleLogout = () => {
+    setShowProfileMenu(false);
+    Alert.alert("Logout", "Are you sure you want to logout?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Logout",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await signOut(auth);
+            router.replace("/");
+            setTimeout(() => {
+              router.replace("/Admin/Login");
+            }, 50);
+          } catch (error) {
+            Alert.alert("Error", "Failed to logout.");
+          }
+        },
+      },
+    ]);
+  };
 
   useEffect(() => {
-    const loadDashboardStats = async () => {
+    const loadDashboardData = async () => {
       try {
-        const usersSnap = await getDocs(collection(db, "users"));
-        setTotalUsers(usersSnap.size);
+        setLoading(true);
+        const [uSnap, cSnap] = await Promise.all([
+          getDocs(collection(db, "users")),
+          getDocs(collection(db, "consultants"))
+        ]);
+        
+        setTotalUsers(uSnap.size);
+        const consData = cSnap.docs.map(d => d.data());
+        setTotalConsultants(consData.length);
+        setConTrend([
+          consData.filter(c => c.status === "pending").length,
+          consData.filter(c => c.status === "accepted").length,
+          consData.filter(c => c.status === "rejected").length,
+          consData.length
+        ]);
 
-        const consultantsSnap = await getDocs(collection(db, "consultants"));
-        const consultants = consultantsSnap.docs.map((doc) => doc.data());
-        setTotalConsultants(consultants.length);
-        setPendingConsultants(consultants.filter((c) => !c.status || c.status === "pending").length);
-        setApprovedConsultants(consultants.filter((c) => c.status === "accepted").length);
-        setRejectedConsultants(consultants.filter((c) => c.status === "rejected").length);
+        const paymentsSnap = await getDocs(collection(db, "subscription_payments"));
+        let sTotal = 0;
+        let aTotal = 0;
+        const combinedList = [];
 
-        const subsRef = collection(db, "subscription_payments");
-        const subsSnap = await getDocs(query(subsRef, where("status", "==", "Approved")));
-        let subsTotal = 0;
-        subsSnap.forEach((d) => (subsTotal += d.data().amount));
-        setTotalSubscriptionRevenue(subsTotal);
-
-        const consultRef = collection(db, "payments");
-        const consultSnap = await getDocs(
-          query(consultRef, where("type", "==", "consultant_earning"), where("status", "==", "completed"))
-        );
-        let consultTotal = 0;
-        const consultList = consultSnap.docs.map((doc) => {
-          const data = doc.data();
-          const adminShare = data.amount * 0.3;
-          consultTotal += adminShare;
-          return { id: doc.id, ...data, adminShare, type: "consultation" };
+        paymentsSnap.forEach((doc) => {
+          const d = doc.data();
+          const amt = Number(d.amount) || 0;
+          if (d.type === "admin_income" && d.status === "completed") {
+            aTotal += amt;
+            combinedList.push({ id: doc.id, ...d, categoryType: 'session', displayAmount: amt, unifiedDate: d.createdAt });
+          } else if (d.status === "Approved") {
+            sTotal += amt;
+            combinedList.push({ id: doc.id, ...d, categoryType: 'subscription', displayAmount: amt, unifiedDate: d.timestamp });
+          }
         });
-        setTotalConsultationRevenue(consultTotal);
 
-        const subsList = subsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data(), type: "subscription" }));
-        const combinedList = [...subsList, ...consultList]
-          .sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0))
-          .slice(0, 5);
-        setRecentPayments(combinedList);
-      } catch (error) {
-        console.log("Dashboard Error:", error);
+        setGrandTotalSubs(sTotal);
+        setGrandTotalAdmin(aTotal);
+        const sorted = combinedList.sort((a, b) => (b.unifiedDate?.toMillis?.() || 0) - (a.unifiedDate?.toMillis?.() || 0));
+        setPayments(sorted);
+      } catch (e) {
+        console.error("Dashboard Fetch Error:", e);
       } finally {
         setLoading(false);
       }
     };
-    loadDashboardStats();
+    loadDashboardData();
   }, []);
 
-  if (loading) {
-    return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#0F3E48" />
-        <Text>Loading Dashboard...</Text>
-      </View>
-    );
-  }
+  const formatDateTime = (ts) => {
+    if (!ts) return "N/A";
+    const date = ts.toDate ? ts.toDate() : new Date(ts);
+    return date.toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
 
-  const grandTotal = totalSubscriptionRevenue + totalConsultationRevenue;
+  const filteredPayments = activeTab === "all" 
+    ? payments 
+    : payments.filter(p => activeTab === "subscription" ? p.categoryType === "subscription" : p.categoryType === "session");
 
   return (
-    <View style={{ flex: 1, paddingBottom: 90 }}>
-      <ScrollView style={styles.container}>
-        {/* Greeting */}
-        <Text style={styles.greeting}>Hi Admin!</Text>
-
-        {/* Quick Stats Grid */}
-        <View style={styles.grid}>
-          <View style={[styles.card, styles.cardUsers]}>
-            <Ionicons name="people" size={30} color="#0F3E48" />
-            <Text style={styles.label}>Users</Text>
-            <Text style={styles.value}>{totalUsers}</Text>
+    <View style={{ flex: 1, backgroundColor: "#F4F7FA" }}>
+      <StatusBar barStyle="dark-content" />
+      
+      {/* HEADER - Laging visible */}
+      <SafeAreaView style={styles.headerSafe}>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.greeting}>Admin Insights</Text>
+            <Text style={styles.subGreeting}>System monitoring & analytics</Text>
           </View>
-          <View style={[styles.card, styles.cardConsultants]}>
-            <Ionicons name="person" size={30} color="#0F3E48" />
-            <Text style={styles.label}>Consultants</Text>
-            <Text style={styles.value}>{totalConsultants}</Text>
-          </View>
+          <TouchableOpacity onPress={() => setShowProfileMenu(true)} style={styles.profileBtn}>
+            <Ionicons name="person-circle" size={45} color="#01579B" />
+          </TouchableOpacity>
         </View>
+      </SafeAreaView>
 
-        <View style={styles.grid}>
-          <View style={[styles.card, styles.cardPending]}>
-            <Ionicons name="time" size={30} color="#f39c12" />
-            <Text style={styles.label}>Pending</Text>
-            <Text style={styles.pending}>{pendingConsultants}</Text>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={{paddingBottom: 120}}>
+        
+        {loading ? (
+          <View style={styles.innerLoader}>
+            <ActivityIndicator size="large" color="#01579B" />
+            <Text style={styles.loaderText}>Updating insights...</Text>
           </View>
-          <View style={[styles.card, styles.cardApproved]}>
-            <Ionicons name="checkmark-circle" size={30} color="#27ae60" />
-            <Text style={styles.label}>Approved</Text>
-            <Text style={styles.approved}>{approvedConsultants}</Text>
-          </View>
-        </View>
-
-        <View style={styles.grid}>
-          <View style={[styles.card, styles.cardRejected]}>
-            <Ionicons name="close-circle" size={30} color="#e74c3c" />
-            <Text style={styles.label}>Rejected</Text>
-            <Text style={styles.rejected}>{rejectedConsultants}</Text>
-          </View>
-        </View>
-
-        {/* Revenue Section */}
-        <Text style={styles.sectionTitle}>Revenue</Text>
-        <View style={styles.grid}>
-          <View style={[styles.card, styles.cardRevenue]}>
-            <Text style={styles.label}>Subscription Revenue</Text>
-            <Text style={styles.revenue}>₱{totalSubscriptionRevenue.toLocaleString()}</Text>
-          </View>
-          <View style={[styles.card, styles.cardRevenue]}>
-            <Text style={styles.label}>Consultation Revenue</Text>
-            <Text style={styles.revenue}>₱{totalConsultationRevenue.toLocaleString()}</Text>
-          </View>
-        </View>
-        <View style={styles.grid}>
-          <View style={[styles.card, styles.cardRevenue]}>
-            <Text style={styles.label}>Grand Total</Text>
-            <Text style={styles.revenue}>₱{grandTotal.toLocaleString()}</Text>
-          </View>
-        </View>
-
-        {/* Recent Payments */}
-        <Text style={styles.sectionTitle}>Recent Payments</Text>
-        {recentPayments.length === 0 ? (
-          <Text style={{ textAlign: "center", color: "#777" }}>No approved payments yet.</Text>
         ) : (
-          recentPayments.map((p) => (
-            <View key={p.id} style={styles.paymentCard}>
-              <Text style={styles.paymentAmount}>
-                {p.type === "subscription"
-                  ? `Subscription ₱${p.amount}`
-                  : `Consultation Admin Share ₱${p.adminShare.toFixed(2)}`}
-              </Text>
-              <Text style={styles.paymentRef}>Ref: {p.reference_number || p.id}</Text>
-              <Text style={styles.paymentDate}>{p.timestamp?.toDate().toLocaleString()}</Text>
+          <>
+            {/* CONSULTANT TREND */}
+            <Text style={styles.sectionTitle}>Consultant Application Trend</Text>
+            <View style={styles.chartCard}>
+              <LineChart
+                data={{
+                  labels: ["Pend", "Appr", "Rej", "Total"],
+                  datasets: [{ data: conTrend }]
+                }}
+                width={screenWidth - 40}
+                height={200}
+                chartConfig={lineChartConfig}
+                bezier
+                style={styles.chartStyle}
+              />
             </View>
-          ))
+
+            {/* SUMMARY CARDS */}
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryCard}>
+                <View style={[styles.iconBox, {backgroundColor: '#E3F2FD'}]}>
+                  <Ionicons name="people" size={20} color="#01579B" />
+                </View>
+                <Text style={styles.summaryValue}>{totalUsers}</Text>
+                <Text style={styles.summaryLabel}>Total Users</Text>
+              </View>
+              <View style={styles.summaryCard}>
+                <View style={[styles.iconBox, {backgroundColor: '#E0F2F1'}]}>
+                  <Ionicons name="school" size={20} color="#2c4f4f" />
+                </View>
+                <Text style={styles.summaryValue}>{totalConsultants}</Text>
+                <Text style={styles.summaryLabel}>Consultants</Text>
+              </View>
+            </View>
+
+            {/* REVENUE CHART */}
+            <Text style={styles.sectionTitle}>Revenue Distribution</Text>
+            <View style={styles.whiteCard}>
+              <View style={styles.totalOverlay}>
+                <Text style={styles.overlayLabel}>Total Revenue</Text>
+                <Text style={styles.overlayValue}>₱{(grandTotalSubs + grandTotalAdmin).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+              </View>
+              <PieChart
+                data={[
+                  { name: "Subs", population: grandTotalSubs || 0.1, color: "#8f2f52", legendFontColor: "#7F7F7F", legendFontSize: 12 },
+                  { name: "Income", population: grandTotalAdmin || 0.1, color: "#2c4f4f", legendFontColor: "#7F7F7F", legendFontSize: 12 },
+                ]}
+                width={screenWidth - 40}
+                height={200}
+                chartConfig={{ color: () => "#000" }}
+                accessor="population"
+                backgroundColor="transparent"
+                paddingLeft="35"
+                absolute={true} 
+              />
+            </View>
+
+            {/* TRANSACTIONS */}
+            <View style={styles.tabHeader}>
+              <Text style={styles.sectionTitle}>Recent Transactions</Text>
+              <View style={styles.tabRow}>
+                {["all", "subscription", "session"].map((tab) => (
+                  <TouchableOpacity 
+                    key={tab} 
+                    onPress={() => setActiveTab(tab)}
+                    style={[styles.tabButton, activeTab === tab && styles.tabActive]}
+                  >
+                    <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                      {tab === "all" ? "All" : tab === "subscription" ? "Subs" : "Income"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.listWrapper}>
+              {filteredPayments.length > 0 ? (
+                filteredPayments.map((p) => (
+                  <View key={p.id} style={styles.paymentCard}>
+                    <View style={[styles.iconCircle, {backgroundColor: p.categoryType === 'subscription' ? '#FCE4EC' : '#E0F2F1'}]}>
+                      <Ionicons name={p.categoryType === 'subscription' ? "card" : "cash"} size={18} color={p.categoryType === 'subscription' ? '#8f2f52' : '#2c4f4f'} />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={styles.paymentTitle}>{p.categoryType === 'subscription' ? 'Subscription' : 'Admin Share'}</Text>
+                      <Text style={styles.paymentDate}>{formatDateTime(p.unifiedDate)}</Text>
+                    </View>
+                    <Text style={[styles.paymentAmount, {color: p.categoryType === 'subscription' ? '#8f2f52' : '#2c4f4f'}]}>
+                      ₱{(p.displayAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                ))
+              ) : (
+                <View style={styles.emptyBox}>
+                  <Text style={styles.emptyText}>No transactions found.</Text>
+                </View>
+              )}
+            </View>
+          </>
         )}
       </ScrollView>
+
+      {/* PROFILE MODAL */}
+      <Modal visible={showProfileMenu} transparent animationType="fade">
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowProfileMenu(false)}>
+          <View style={styles.dropdownMenu}>
+            <View style={styles.adminInfo}>
+              <Ionicons name="shield-checkmark" size={18} color="#01579B" />
+              <Text style={styles.adminLabel}>Administrator</Text>
+            </View>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity onPress={handleLogout} style={styles.logoutMenuItem}>
+              <Ionicons name="log-out-outline" size={20} color="#D32F2F" />
+              <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       <BottomNavbar role="admin" />
     </View>
   );
 }
 
+const lineChartConfig = {
+  backgroundColor: "#fff",
+  backgroundGradientFrom: "#fff",
+  backgroundGradientTo: "#fff",
+  decimalPlaces: 0,
+  color: (opacity = 1) => `rgba(1, 87, 155, ${opacity})`,
+  labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})`,
+  propsForDots: { r: "5", strokeWidth: "2", stroke: "#01579B" },
+  propsForBackgroundLines: { strokeDasharray: "" }
+};
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f9fafb", padding: 20,  paddingTop:50,},
-  loader: { flex: 1, justifyContent: "center", alignItems: "center" },
+  headerSafe: { backgroundColor: '#FFF', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 30, paddingVertical: 25 },
+  greeting: { fontSize: 22, fontWeight: "800", color: "#01579B" },
+  subGreeting: { fontSize: 12, color: '#64748B', marginTop: -2 },
+  container: { flex: 1 },
+  innerLoader: { marginTop: 100, alignItems: 'center', justifyContent: 'center' },
+  loaderText: { marginTop: 10, color: '#64748B', fontWeight: '500' },
+  
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.2)' },
+  dropdownMenu: { position: 'absolute', top: 100, right: 20, backgroundColor: '#fff', borderRadius: 15, width: 180, padding: 12, elevation: 10 },
+  adminInfo: { flexDirection: 'row', alignItems: 'center', padding: 5 },
+  adminLabel: { marginLeft: 8, fontWeight: '700', color: '#334155', fontSize: 14 },
+  menuDivider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 8 },
+  logoutMenuItem: { flexDirection: 'row', alignItems: 'center', padding: 8 },
+  logoutText: { marginLeft: 10, color: '#D32F2F', fontWeight: '700' },
 
-  greeting: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#0F3E48",
-    textAlign: "left", // moved to left
-    marginBottom: 15,
-  },
+  sectionTitle: { fontSize: 16, fontWeight: "700", color: "#1E293B", paddingHorizontal: 20, marginTop: 25, marginBottom: 12 },
+  chartCard: { backgroundColor: "#fff", marginHorizontal: 20, borderRadius: 24, padding: 15, elevation: 4, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10 },
+  chartStyle: { borderRadius: 16, marginVertical: 0, paddingRight: 40 },
+  
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginTop: 15 },
+  summaryCard: { backgroundColor: '#fff', width: '48%', padding: 18, borderRadius: 24, elevation: 3, shadowColor: '#000', shadowOpacity: 0.05 },
+  iconBox: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+  summaryValue: { fontSize: 22, fontWeight: '800', color: '#1E293B' },
+  summaryLabel: { fontSize: 11, color: '#64748B', fontWeight: '600', marginTop: 2 },
 
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#0F3E48",
-    marginTop: 30,
-    marginBottom: 15,
-    textAlign: "left",
-  },
+  whiteCard: { backgroundColor: "#fff", marginHorizontal: 20, borderRadius: 24, padding: 20, elevation: 4, alignItems: 'center' },
+  totalOverlay: { position: 'absolute', top: '40%', zIndex: 1, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.9)', padding: 10, borderRadius: 50 }, 
+  overlayLabel: { fontSize: 10, color: '#64748B', fontWeight: 'bold', textTransform: 'uppercase' },
+  overlayValue: { fontSize: 14, fontWeight: '800', color: '#01579B' },
 
-  grid: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
+  tabHeader: { paddingHorizontal: 20 },
+  tabRow: { flexDirection: 'row', marginBottom: 10 },
+  tabButton: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 12, backgroundColor: '#E2E8F0', marginRight: 8 },
+  tabActive: { backgroundColor: '#01579B' },
+  tabText: { fontSize: 12, fontWeight: '700', color: '#64748B' },
+  tabTextActive: { color: '#fff' },
 
-  card: {
-    flex: 1,
-    paddingVertical: 20,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    marginHorizontal: 6,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-    minHeight: 120, // keeps same size even if alone
-  },
-
-   // Light pastel variants
-   cardUsers: { backgroundColor: "#e0f7fa" },        // light cyan
-   cardConsultants: { backgroundColor: "#ede7f6" }, // light lavender
-   cardPending: { backgroundColor: "#fff3e0" },     // light orange
-   cardApproved: { backgroundColor: "#e8f5e9" },    // light green
-   cardRejected: { backgroundColor: "#ffebee" },    // light red
-   cardRevenue: { backgroundColor: "#f3e5f5" },     // light purple
- 
-   label: {
-     fontSize: 14,
-     color: "#333",
-     marginTop: 6,
-     fontWeight: "500",
-   },
-   value: {
-     fontSize: 22,
-     fontWeight: "800",
-     color: "#0F3E48",
-     marginTop: 6,
-   },
- 
-   revenue: {
-     fontSize: 22,
-     fontWeight: "700",
-     color: "#27ae60",
-     marginTop: 8,
-   },
-   pending: {
-     fontSize: 22,
-     fontWeight: "700",
-     color: "#f39c12",
-     marginTop: 8,
-   },
-   approved: {
-     fontSize: 22,
-     fontWeight: "700",
-     color: "#27ae60",
-     marginTop: 8,
-   },
-   rejected: {
-     fontSize: 22,
-     fontWeight: "700",
-     color: "#e74c3c",
-     marginTop: 8,
-   },
- 
-   paymentCard: {
-     backgroundColor: "#e3f2fd", // light blue for payments
-     padding: 20,
-     borderRadius: 18,
-     marginBottom: 16,
-     shadowColor: "#000",
-     shadowOpacity: 0.05,
-     shadowRadius: 4,
-     shadowOffset: { width: 0, height: 2 },
-     elevation: 2,
-   },
-   paymentAmount: {
-     fontSize: 18,
-     fontWeight: "700",
-     color: "#0F3E48",
-     marginBottom: 4,
-   },
-   paymentRef: {
-     fontSize: 14,
-     color: "#555",
-     marginTop: 2,
-   },
-   paymentDate: {
-     fontSize: 12,
-     color: "#777",
-     marginTop: 2,
-   },
- });
- 
+  listWrapper: { paddingHorizontal: 20 },
+  paymentCard: { backgroundColor: "#fff", padding: 16, borderRadius: 20, marginBottom: 10, flexDirection: 'row', alignItems: 'center', elevation: 2 },
+  iconCircle: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  paymentTitle: { fontSize: 14, fontWeight: '700', color: '#1E293B' },
+  paymentDate: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
+  paymentAmount: { fontSize: 16, fontWeight: '800' },
+  emptyBox: { padding: 40, alignItems: 'center' },
+  emptyText: { color: '#94A3B8' }
+});

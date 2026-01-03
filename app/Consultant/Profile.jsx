@@ -1,17 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import { doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
+import React, { useEffect, useState } from "react";
 import {
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  Alert,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 
 import { db } from "../../config/firebase";
 import BottomNavbar from "../components/BottomNav";
@@ -20,64 +20,79 @@ import Button from "../components/Button";
 export default function ConsultantProfile() {
   const router = useRouter();
 
-  // TEMP (replace later with real data if needed)
-  const userName = "Noelyn Pedragoza";
+  const [consultantName, setConsultantName] = useState("Consultant");
+  const [logoutVisible, setLogoutVisible] = useState(false);
+
   const avatarSource = require("../../assets/office-woman.png");
 
-  const handlePress = (section) => {
-    console.log(`Pressed: ${section}`);
-  };
+  /* ================= LOAD CONSULTANT NAME ================= */
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const uid = await AsyncStorage.getItem(
+          "aestheticai:current-user-id"
+        );
+        if (!uid) return;
 
-  /* ================= LOGOUT (FINAL FIX) ================= */
-  const handleLogout = async () => {
-    Alert.alert(
-      "Logout",
-      "Are you sure you want to logout?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Logout",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const uid = await AsyncStorage.getItem(
-                "aestheticai:current-user-id"
-              );
+        const snap = await getDoc(doc(db, "consultants", uid));
+        if (!snap.exists()) return;
 
-              // ✅ mark consultant offline
-              if (uid) {
-                await updateDoc(doc(db, "consultants", uid), {
-                  isOnline: false,
-                  lastSeen: serverTimestamp(),
-                });
-              }
+        const data = snap.data();
+        setConsultantName(data.fullName || "Consultant");
 
-              // ✅ clear ALL local storage
-              await AsyncStorage.multiRemove([
-                "aestheticai:current-user-id",
-                "aestheticai:current-user-role",
-              ]);
+        // cache for persistence
+        await AsyncStorage.setItem(
+          "aestheticai:consultant-profile",
+          JSON.stringify(data)
+        );
+      } catch (err) {
+        console.log("Load consultant profile error:", err);
+      }
+    };
 
-              // ✅ reset navigation
-              router.replace("/Login");
-            } catch (err) {
-              console.log("❌ Logout error:", err);
-            }
-          },
-        },
-      ],
-      { cancelable: true }
-    );
+    loadProfile();
+  }, []);
+
+  /* ================= CONFIRM LOGOUT ================= */
+  const confirmLogout = async () => {
+    try {
+      const uid = await AsyncStorage.getItem(
+        "aestheticai:current-user-id"
+      );
+
+      if (uid) {
+        await updateDoc(doc(db, "consultants", uid), {
+          isOnline: false,
+          lastSeen: serverTimestamp(),
+        });
+      }
+
+      await AsyncStorage.multiRemove([
+        "aestheticai:current-user-id",
+        "aestheticai:current-user-role",
+        "aestheticai:consultant-profile",
+      ]);
+
+      setLogoutVisible(false);
+
+      // ✅ BACK TO CONSULTANT LOGIN
+      router.replace({
+        pathname: "/Login",
+        params: { role: "consultant" },
+      });
+    } catch (err) {
+      console.log("Logout error:", err);
+    }
   };
 
   return (
     <View style={styles.page}>
-      {/* Header */}
+      {/* ===== HEADER ===== */}
       <View style={styles.headerWrap}>
         <View style={styles.profileRow}>
           <Image source={avatarSource} style={styles.avatarImage} />
           <View style={styles.profileInfo}>
-            <Text style={styles.header}>{userName}</Text>
+            <Text style={styles.header}>{consultantName}</Text>
             <Text style={styles.subHeader}>Consultant Account</Text>
           </View>
         </View>
@@ -85,17 +100,14 @@ export default function ConsultantProfile() {
       </View>
 
       <ScrollView contentContainerStyle={styles.container}>
+        {/* EDIT PROFILE */}
         <TouchableOpacity
           style={styles.card}
-          onPress={() => handlePress("Edit Consultant Profile")}
+          onPress={() => router.push("/Consultant/EditProfile")}
         >
-          <Ionicons
-            name="person-circle-outline"
-            size={30}
-            color="#1E90FF"
-          />
+          <Ionicons name="person-circle-outline" size={30} color="#1E90FF" />
           <View style={styles.cardContent}>
-            <Text style={styles.cardTitle}>Edit Consultant Profile</Text>
+            <Text style={styles.cardTitle}>Edit Profile</Text>
             <Text style={styles.cardSubtitle}>
               Update your professional details
             </Text>
@@ -103,13 +115,14 @@ export default function ConsultantProfile() {
           <Ionicons name="chevron-forward" size={22} color="#999" />
         </TouchableOpacity>
 
+        {/* AVAILABILITY */}
         <TouchableOpacity
           style={styles.card}
-          onPress={() => handlePress("Manage Appointments")}
+          onPress={() => router.push("/Consultant/EditAvailability")}
         >
           <Ionicons name="calendar-outline" size={30} color="#0277BD" />
           <View style={styles.cardContent}>
-            <Text style={styles.cardTitle}>Manage Appointments</Text>
+            <Text style={styles.cardTitle}>Manage Availability</Text>
             <Text style={styles.cardSubtitle}>
               View and update your schedule
             </Text>
@@ -117,23 +130,10 @@ export default function ConsultantProfile() {
           <Ionicons name="chevron-forward" size={22} color="#999" />
         </TouchableOpacity>
 
+        {/* CHANGE PASSWORD */}
         <TouchableOpacity
           style={styles.card}
-          onPress={() => handlePress("View Earnings")}
-        >
-          <Ionicons name="cash-outline" size={30} color="#2ECC71" />
-          <View style={styles.cardContent}>
-            <Text style={styles.cardTitle}>View Earnings</Text>
-            <Text style={styles.cardSubtitle}>
-              Check your balance and withdrawals
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={22} color="#999" />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.card}
-          onPress={() => handlePress("Change Password")}
+          onPress={() => router.push("/Consultant/ChangePassword")}
         >
           <Ionicons name="lock-closed-outline" size={30} color="#C44569" />
           <View style={styles.cardContent}>
@@ -145,22 +145,56 @@ export default function ConsultantProfile() {
           <Ionicons name="chevron-forward" size={22} color="#999" />
         </TouchableOpacity>
 
-        {/* LOGOUT */}
+        {/* LOGOUT BUTTON */}
         <Button
           icon={<Ionicons name="log-out-outline" size={28} color="#fff" />}
           title="Logout"
           subtitle="Sign out of your consultant account"
-          onPress={handleLogout}
-          style={styles.logoutButton}
-          textColor="#fff"
+          onPress={() => setLogoutVisible(true)}
           backgroundColor="#C44569"
+          textColor="#fff"
         />
       </ScrollView>
 
       <BottomNavbar role="consultant" />
+
+      {/* ===== LOGOUT MODAL ===== */}
+      <Modal
+        transparent
+        animationType="fade"
+        visible={logoutVisible}
+        onRequestClose={() => setLogoutVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Logout</Text>
+            <Text style={styles.modalText}>
+              Do you want to logout?
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setLogoutVisible(false)}
+              >
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.logoutBtn}
+                onPress={confirmLogout}
+              >
+                <Text style={styles.logoutText}>Logout</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
+
+/* ================= STYLES ================= */
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: "#F9FAFB" },
@@ -217,4 +251,52 @@ const styles = StyleSheet.create({
   cardContent: { flex: 1, marginLeft: 14 },
   cardTitle: { fontSize: 17, fontWeight: "700", color: "#2C3E50" },
   cardSubtitle: { fontSize: 13, color: "#7F8C8D", marginTop: 2 },
+
+  /* MODAL */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalBox: {
+    width: "85%",
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 24,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#2C3E50",
+    marginBottom: 6,
+  },
+  modalText: {
+    fontSize: 14,
+    color: "#555",
+    marginBottom: 20,
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  cancelBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+  },
+  cancelText: {
+    fontWeight: "700",
+    color: "#777",
+  },
+  logoutBtn: {
+    backgroundColor: "#C44569",
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 10,
+  },
+  logoutText: {
+    color: "#fff",
+    fontWeight: "800",
+  },
 });

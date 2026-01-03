@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams } from "expo-router";
+import { getAuth } from "firebase/auth";
 import {
   addDoc,
   collection,
@@ -11,7 +12,6 @@ import {
 } from "firebase/firestore";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -46,9 +46,10 @@ const formatActiveStatus = (isOnline, lastSeen) => {
 
 export default function ChatRoom() {
   const { roomId, userId, consultantId } = useLocalSearchParams();
+  const auth = getAuth();
 
   const [user, setUser] = useState(null);
-  const [consultant, setConsultant] = useState(null); // ✅ already exists
+  const [consultant, setConsultant] = useState(null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [ratingModalVisible, setRatingModalVisible] = useState(false);
@@ -80,12 +81,9 @@ export default function ChatRoom() {
   /* ================= LOAD CONSULTANT ================= */
   useEffect(() => {
     if (!consultantId) return;
-
-    const unsub = onSnapshot(doc(db, "consultants", consultantId), (snap) => {
+    return onSnapshot(doc(db, "consultants", consultantId), (snap) => {
       if (snap.exists()) setConsultant(snap.data());
     });
-
-    return () => unsub();
   }, [consultantId]);
 
   /* ================= ENSURE CHAT ROOM ================= */
@@ -94,7 +92,7 @@ export default function ChatRoom() {
 
     const ref = doc(db, "chatRooms", roomId);
 
-    const unsub = onSnapshot(ref, (snap) => {
+    return onSnapshot(ref, (snap) => {
       if (!snap.exists()) {
         setDoc(ref, {
           userId,
@@ -124,8 +122,6 @@ export default function ChatRoom() {
         );
       }
     });
-
-    return () => unsub();
   }, [roomId, userId, consultantId]);
 
   /* ================= MESSAGES ================= */
@@ -186,7 +182,7 @@ export default function ChatRoom() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={styles.container}>
-        {/* ================= HEADER (FIXED) ================= */}
+        {/* HEADER */}
         <View style={styles.chatHeader}>
           <View style={styles.avatar}>
             <Image
@@ -269,10 +265,41 @@ export default function ChatRoom() {
         </View>
       </Modal>
 
-      {/* RATING MODAL – unchanged */}
+      {/* ⭐ RATING MODAL — FIXED LOGIC */}
       <RatingModal
         visible={ratingModalVisible}
+        reviewerName={user?.fullName || user?.name || "Anonymous"}
         onClose={() => setRatingModalVisible(false)}
+        onSubmit={async ({ rating, feedback, reviewerName }) => {
+          try {
+            if (!auth.currentUser) return false;
+
+            await addDoc(collection(db, "ratings"), {
+              roomId,
+              userId: auth.currentUser.uid, // ✅ FIXED
+              consultantId,
+              rating,
+              feedback,
+              reviewerName,
+              createdAt: serverTimestamp(),
+            });
+
+            await updateDoc(doc(db, "chatRooms", roomId), {
+              ratingSubmitted: true,
+              status: "completed",
+            });
+            
+            await updateDoc(doc(db, "appointments", roomId.replace("appointment_", "")), {
+              status: "completed",
+            });
+            
+
+            return true;
+          } catch (err) {
+            console.log("Rating submit error:", err);
+            return false;
+          }
+        }}
       />
     </KeyboardAvoidingView>
   );
@@ -282,7 +309,6 @@ export default function ChatRoom() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 15, paddingTop: 40 },
-
   chatHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -299,17 +325,14 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   avatarImage: { width: "100%", height: "100%" },
-
   chatName: { fontSize: 16, fontWeight: "700" },
   chatStatus: { fontSize: 12, color: "#4CAF50" },
-
   lockNotice: {
     textAlign: "center",
     color: "#888",
     marginBottom: 6,
     fontStyle: "italic",
   },
-
   message: {
     padding: 10,
     marginVertical: 6,
@@ -318,7 +341,6 @@ const styles = StyleSheet.create({
   },
   myMessage: { alignSelf: "flex-end", backgroundColor: "#0084FF" },
   theirMessage: { alignSelf: "flex-start", backgroundColor: "#E4E6EB" },
-
   inputContainer: {
     position: "absolute",
     bottom: 0,
@@ -342,9 +364,7 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   sendBtnText: { color: "#fff", fontWeight: "700" },
-
   image: { width: 150, height: 150, borderRadius: 10 },
-
   modalBackground: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.9)",
