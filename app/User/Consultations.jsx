@@ -5,6 +5,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   query,
   where,
@@ -19,21 +20,21 @@ import {
   Text,
   TouchableOpacity,
   View,
+  StatusBar,
 } from "react-native";
 import { db } from "../../config/firebase";
+import PaymentModal from "../components/PaymentModal";
 
-/* ================= SAFE TIME PARSER (AM / PM OK) ================= */
-
+// -----------------------------
+// 🔧 DATE PARSER (UNCHANGED)
+// -----------------------------
 const parseLegacyDateTime = (dateStr, timeStr) => {
   try {
     if (!dateStr || !timeStr) return null;
-
     const [time, modifier] = timeStr.replace(/\u202F/g, " ").split(" ");
     let [h, m] = time.split(":").map(Number);
-
     if (modifier === "PM" && h < 12) h += 12;
     if (modifier === "AM" && h === 12) h = 0;
-
     const [y, mo, d] = dateStr.split("-").map(Number);
     return new Date(y, mo - 1, d, h, m || 0);
   } catch {
@@ -41,41 +42,52 @@ const parseLegacyDateTime = (dateStr, timeStr) => {
   }
 };
 
-/* ================= STATUS LOGIC (BULLETPROOF) ================= */
-
+// -----------------------------
+// ✅ STATUS LOGIC (12 HOURS)
+// -----------------------------
 const getStatus = (item) => {
   if (item.status === "cancelled") return "cancelled";
+  if (item.status === "completed") return "past";
 
-  let start =
+  const start =
     item.appointmentAt?.toDate?.() ||
     parseLegacyDateTime(item.date, item.time);
 
   if (!start) return "upcoming";
 
   const now = new Date();
-  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  const twelveHoursLater = new Date(
+    start.getTime() + 12 * 60 * 60 * 1000
+  );
 
   if (now < start) return "upcoming";
-  if (now >= start && now <= end) return "ongoing";
+  if (now >= start && now <= twelveHoursLater) return "ongoing";
+
   return "past";
 };
 
+// -----------------------------
+// 📱 MAIN SCREEN
+// -----------------------------
 export default function Consultations() {
   const [consultations, setConsultations] = useState([]);
   const [consultantMap, setConsultantMap] = useState({});
   const [activeTab, setActiveTab] = useState("upcoming");
+
+  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [currentPaymentData, setCurrentPaymentData] = useState(null);
+
   const router = useRouter();
 
-  /* ================= LOAD CONSULTATIONS (FIXED) ================= */
-
+  // -----------------------------
+  // 🔥 LOAD APPOINTMENTS
+  // -----------------------------
   useEffect(() => {
     let unsub;
-
     const load = async () => {
       const userId = await AsyncStorage.getItem("userUid");
       if (!userId) return;
 
-      // ❌ NO orderBy("date") – STRING DATE BUG FIXED
       const q = query(
         collection(db, "appointments"),
         where("userId", "==", userId)
@@ -96,15 +108,10 @@ export default function Consultations() {
               _sortTime: sortTime,
             };
           })
-          // ✅ REAL DATE SORT (CLIENT SIDE)
-          .sort((a, b) => {
-            if (!a._sortTime || !b._sortTime) return 0;
-            return b._sortTime - a._sortTime;
-          });
+          .sort((a, b) => b._sortTime - a._sortTime);
 
         setConsultations(items);
 
-        // Load consultant names
         const map = {};
         await Promise.all(
           items.map(async (i) => {
@@ -124,7 +131,24 @@ export default function Consultations() {
     return () => unsub && unsub();
   }, []);
 
-  /* ================= ACTIONS ================= */
+  // -----------------------------
+  // 💳 PAYMENT CHECK
+  // -----------------------------
+  const checkPayment = async (item) => {
+    try {
+      const q = query(
+        collection(db, "payments"),
+        where("userId", "==", item.userId),
+        where("consultantId", "==", item.consultantId),
+        where("appointmentId", "==", item.id),
+        where("status", "==", "completed")
+      );
+      const snap = await getDocs(q);
+      return !snap.empty;
+    } catch {
+      return false;
+    }
+  };
 
   const handleCancel = async (id) => {
     Alert.alert("Cancel Appointment", "Are you sure?", [
@@ -142,114 +166,145 @@ export default function Consultations() {
     ]);
   };
 
-  /* ================= FILTER ================= */
+  const openChat = async (item) => {
+    if (!item.chatRoomId) {
+      Alert.alert("Chat not available", "Chat room is not ready yet.");
+      return;
+    }
+
+    const hasPaid = await checkPayment(item);
+
+    if (!hasPaid) {
+      setCurrentPaymentData({
+        ...item,
+        roomId: item.chatRoomId,
+        appointmentId: item.id,
+        appointmentDate:
+          item.date ||
+          item.appointmentAt?.toDate()?.toLocaleDateString(),
+        appointmentTime:
+          item.time ||
+          item.appointmentAt?.toDate()?.toLocaleTimeString(),
+      });
+      setPaymentModalVisible(true);
+      return;
+    }
+
+    router.push({
+      pathname: "/User/ChatRoom",
+      params: {
+        roomId: item.chatRoomId,
+        consultantId: item.consultantId,
+        appointmentId: item.id,
+      },
+    });
+  };
 
   const filtered = consultations.filter(
     (c) => c.computedStatus === activeTab
   );
 
-  /* ================= RENDER ITEM ================= */
-
   const renderItem = ({ item }) => {
     const status = item.computedStatus;
+    const statusColors = {
+      ongoing: { bg: "#E8F5E9", text: "#2E7D32", icon: "radio-button-on" },
+      upcoming: { bg: "#FFF3E0", text: "#EF6C00", icon: "time-outline" },
+      cancelled: { bg: "#FFEBEE", text: "#C62828", icon: "close-circle-outline" },
+      past: { bg: "#F5F5F5", text: "#616161", icon: "checkmark-done-circle-outline" },
+    };
 
-    const statusColor =
-      status === "ongoing"
-        ? "#4CAF50"
-        : status === "upcoming"
-        ? "#FF9800"
-        : status === "cancelled"
-        ? "#F44336"
-        : "#9E9E9E";
+    const currentStyle = statusColors[status];
 
     return (
-      <View style={styles.item}>
-        <View style={styles.itemHeader}>
-          <View style={styles.identityRow}>
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View style={styles.consultantInfo}>
             <View style={styles.avatarCircle}>
-              <Ionicons name="person" size={18} color="#0F3E48" />
+              <Ionicons name="person" size={16} color="#01579B" />
             </View>
             <Text style={styles.consultantName}>
               {consultantMap[item.consultantId] || "Consultant"}
             </Text>
           </View>
-
-          <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-            <Text style={styles.statusText}>{status.toUpperCase()}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: currentStyle.bg }]}>
+            <Ionicons
+              name={currentStyle.icon}
+              size={12}
+              color={currentStyle.text}
+              style={{ marginRight: 4 }}
+            />
+            <Text style={[styles.statusBadgeText, { color: currentStyle.text }]}>
+              {status.toUpperCase()}
+            </Text>
           </View>
         </View>
 
-        <Text style={styles.details}>
-          {item.appointmentAt?.toDate
-            ? item.appointmentAt.toDate().toLocaleString()
-            : `${item.date} @ ${item.time}`}
-        </Text>
+        <View style={styles.cardDivider} />
+
+        {status === "ongoing" && (
+          <TouchableOpacity
+            style={styles.openChatBtn}
+            onPress={() => openChat(item)}
+          >
+            <Ionicons name="chatbubbles-outline" size={16} color="#FFF" />
+            <Text style={styles.openChatBtnText}>Open Chat</Text>
+          </TouchableOpacity>
+        )}
 
         {status === "upcoming" && (
           <TouchableOpacity
-            style={styles.cancelButton}
+            style={styles.cancelBtn}
             onPress={() => handleCancel(item.id)}
           >
-            <Text style={styles.cancelText}>Cancel</Text>
+            <Text style={styles.cancelBtnText}>Cancel Appointment</Text>
           </TouchableOpacity>
         )}
       </View>
     );
   };
 
-  /* ================= UI ================= */
-
   return (
     <View style={styles.container}>
-      {/* ===== HEADER ===== */}
-      <View style={styles.chatHeaderRow}>
-        <View style={styles.chatHeaderLeft}>
-          <View style={styles.headerAvatar}>
-            <Ionicons name="calendar" size={20} color="#0F3E48" />
-          </View>
-          <View>
-            <Text style={styles.chatTitle}>Consultations</Text>
-            <Text style={styles.chatSubtitle}>
-              {filtered.length} record(s)
-            </Text>
-          </View>
+      <StatusBar barStyle="dark-content" />
+
+      {/* 🔥 HEADER RESTORED */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.headerTitle}>Consultations</Text>
+          <Text style={styles.headerSubtitle}>
+            {filtered.length} active sessions
+          </Text>
         </View>
-
-        <View style={styles.iconGroup}>
-  <TouchableOpacity
-    style={styles.iconBtn}
-    onPress={() => router.push("/User/Consultants")}
-  >
-    <Ionicons name="people" size={24} color="#0F3E48" />
-  </TouchableOpacity>
-
-  <TouchableOpacity
-    style={styles.iconBtn}
-    onPress={() => router.push("/User/ChatList")}
-  >
-    <Ionicons name="chatbubble-ellipses" size={24} color="#0F3E48" />
-  </TouchableOpacity>
-</View>
-
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => router.push("/User/Consultants")}
+          >
+            <Ionicons name="people" size={22} color="#01579B" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => router.push("/User/ChatList")}
+          >
+            <Ionicons name="chatbubble-ellipses" size={22} color="#01579B" />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <View style={styles.headerDivider} />
-
-      {/* ===== TABS ===== */}
-      <View style={styles.tabContainer}>
+      <View style={styles.tabWrapper}>
         {["upcoming", "ongoing", "past", "cancelled"].map((t) => (
           <TouchableOpacity
             key={t}
             onPress={() => setActiveTab(t)}
             style={[
-              styles.tabButton,
-              activeTab === t && styles.activeTabButton,
+              styles.tabItem,
+              activeTab === t && styles.activeTabItem,
             ]}
           >
             <Text
               style={[
-                styles.tabText,
-                activeTab === t && styles.activeTabText,
+                styles.tabLabel,
+                activeTab === t && styles.activeTabLabel,
               ]}
             >
               {t.toUpperCase()}
@@ -262,101 +317,106 @@ export default function Consultations() {
         data={filtered}
         keyExtractor={(i) => i.id}
         renderItem={renderItem}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>No consultations found.</Text>
-        }
+        showsVerticalScrollIndicator={false}
       />
+
+      {currentPaymentData && (
+        <PaymentModal
+          visible={paymentModalVisible}
+          onClose={() => setPaymentModalVisible(false)}
+          {...currentPaymentData}
+        />
+      )}
     </View>
   );
 }
 
-/* ================= STYLES ================= */
-
+// -----------------------------
+// 🎨 STYLES
+// -----------------------------
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F3F9FA", padding: 16 },
+  container: { flex: 1, backgroundColor: "#F8FAFC", paddingHorizontal: 20 },
 
-  chatHeaderRow: {
+  header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: 30,
+    paddingTop: 40,
     paddingBottom: 20,
   },
-  chatHeaderLeft: { flexDirection: "row", alignItems: "center" },
-  headerAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#E3F2FD",
+  headerTitle: { fontSize: 26, fontWeight: "900", color: "#0F3E48" },
+  headerSubtitle: { fontSize: 14, color: "#64748B", marginTop: -2 },
+  headerActions: { flexDirection: "row", gap: 10 },
+  actionBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#FFF",
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 3,
+  },
+
+  tabWrapper: {
+    flexDirection: "row",
+    backgroundColor: "#F1F5F9",
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 20,
+  },
+  tabItem: { flex: 1, paddingVertical: 10, alignItems: "center" },
+  activeTabItem: { backgroundColor: "#FFF", borderRadius: 10 },
+  tabLabel: { fontSize: 11, fontWeight: "700", color: "#64748B" },
+  activeTabLabel: { color: "#01579B" },
+
+  card: {
+    backgroundColor: "#FFF",
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  consultantInfo: { flexDirection: "row", alignItems: "center" },
+  avatarCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#E1F5FE",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 10,
   },
-  chatTitle: { fontSize: 18, fontWeight: "800", color: "#0F3E48" },
-  chatSubtitle: { fontSize: 12, color: "#777" },
-
-  iconGroup: {
+  consultantName: { fontSize: 16, fontWeight: "800", color: "#0F3E48" },
+  statusBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 2, // adjust mo kung mas dikit o mas malayo
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
-  iconBtn:{
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.15)",
-  
-  },
- 
-  headerDivider: {
-    height: 1,
-    backgroundColor: "#E4E6EB",
-    marginBottom: 12,
-  },
+  statusBadgeText: { fontSize: 10, fontWeight: "800" },
+  cardDivider: { height: 1, backgroundColor: "#F1F5F9", marginVertical: 12 },
 
-  tabContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 12,
-  },
-  tabButton: { paddingVertical: 6 },
-  tabText: { fontWeight: "700", color: "#999" },
-  activeTabButton: { borderBottomWidth: 2, borderBottomColor: "#0F3E48" },
-  activeTabText: { color: "#0F3E48" },
-
-  item: {
-    backgroundColor: "#FFF",
-    padding: 16,
-    borderRadius: 10,
-    marginBottom: 12,
-    elevation: 2,
-  },
-  itemHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  identityRow: { flexDirection: "row", alignItems: "center" },
-  avatarCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#E3F2FD",
+  openChatBtn: {
+    backgroundColor: "#01579B",
+    paddingVertical: 12,
+    borderRadius: 12,
     alignItems: "center",
+    flexDirection: "row",
     justifyContent: "center",
-    marginRight: 8,
+    gap: 6,
   },
-  consultantName: { fontWeight: "700", color: "#0F3E48" },
-  statusBadge: { paddingHorizontal: 8, borderRadius: 10 },
-  statusText: { color: "#FFF", fontWeight: "700", fontSize: 12 },
-  details: { marginTop: 6, color: "#555" },
+  openChatBtnText: { color: "#FFF", fontWeight: "800", fontSize: 13 },
 
-  cancelButton: {
-    backgroundColor: "#F44336",
-    padding: 6,
-    borderRadius: 6,
-    alignSelf: "flex-end",
-    marginTop: 8,
+  cancelBtn: {
+    backgroundColor: "#FFF1F0",
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: "center",
   },
-  cancelText: { color: "#FFF", fontWeight: "700" },
-
-  emptyText: { textAlign: "center", marginTop: 30, color: "#999" },
+  cancelBtnText: { color: "#CF1322", fontWeight: "700", fontSize: 13 },
 });

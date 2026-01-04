@@ -1,6 +1,7 @@
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useLocalSearchParams } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -8,42 +9,46 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
+  Linking,
+  Alert,
+  Dimensions,
+  Keyboard,
 } from "react-native";
 
-import { doc, onSnapshot, updateDoc } from "firebase/firestore";
+import * as ImagePicker from "expo-image-picker"; 
+import { doc, onSnapshot, updateDoc, Timestamp } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import { listenToMessages } from "../../services/chatService";
 import { pickFile } from "../../services/fileUploadService";
-import { handleUnsendMessage } from "../../services/handleUnsendMessage";
+import { handleUnsendMessage } from "../../services/handleUnsendMessage"; 
 import { useSendMessage } from "../../services/useSendMessage";
 
-/* ================= AUTO COMPLETE UTILS ================= */
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const TWELVE_HOURS = 12 * 60 * 60 * 1000;
+
 const isAfter12Hours = (timestamp) => {
   if (!timestamp?.toDate) return false;
   return Date.now() - timestamp.toDate().getTime() > TWELVE_HOURS;
 };
 
-/* ================= ACTIVE STATUS FORMAT ================= */
 const formatLastSeen = (timestamp) => {
-  if (!timestamp?.toDate) return "Active recently";
-  const last = timestamp.toDate();
-  const now = new Date();
-  const diffMin = Math.floor((now - last) / 60000);
+  if (!timestamp) return "Active recently";
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  const diffMin = Math.floor((Date.now() - date) / 60000);
   if (diffMin < 1) return "Active just now";
-  if (diffMin < 60) return `Active ${diffMin} minutes ago`;
+  if (diffMin < 60) return `${diffMin}m ago`;
   const diffHr = Math.floor(diffMin / 60);
-  return diffHr < 24
-    ? `Active ${diffHr} hour${diffHr > 1 ? "s" : ""} ago`
-    : `Active ${Math.floor(diffHr / 24)} days ago`;
+  return diffHr < 24 ? `${diffHr}h ago` : `${Math.floor(diffHr / 24)}d ago`;
 };
 
 export default function ChatRoom() {
+  const router = useRouter();
   const { roomId, userId: routeUserId } = useLocalSearchParams();
 
   const [messages, setMessages] = useState([]);
@@ -51,72 +56,65 @@ export default function ChatRoom() {
   const [consultant, setConsultant] = useState(null);
   const [chatUser, setChatUser] = useState(null);
   const [loading, setLoading] = useState(true);
-
   const [roomStatus, setRoomStatus] = useState(null);
-  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [previewImage, setPreviewImage] = useState(null);
+  const [isSending, setIsSending] = useState(false);
 
-  const flatListRef = useRef(null);
-  const unsubRef = useRef(null);
+  const chatMessages = useMemo(() => {
+    return [...messages].reverse();
+  }, [messages]);
 
-  /* ================= LOAD CONSULTANT ================= */
   useEffect(() => {
     const loadProfile = async () => {
-      const keys = await AsyncStorage.getAllKeys();
-      const profileKey = keys.find((k) =>
-        k.startsWith("aestheticai:user-profile:")
-      );
-      if (!profileKey) return;
-      const parsed = JSON.parse(await AsyncStorage.getItem(profileKey));
-      if (parsed?.uid) setConsultant({ id: parsed.uid, ...parsed });
+      try {
+        const keys = await AsyncStorage.getAllKeys();
+        const key = keys.find((k) => k.startsWith("aestheticai:user-profile:"));
+        if (!key) return;
+        const data = await AsyncStorage.getItem(key);
+        const parsed = JSON.parse(data);
+        if (parsed?.uid) setConsultant({ id: parsed.uid, ...parsed });
+      } catch (e) {
+        console.error("Error loading profile", e);
+      }
     };
     loadProfile();
   }, []);
 
-  /* ================= LOAD CLIENT ================= */
   useEffect(() => {
     if (!routeUserId) return;
-    return onSnapshot(doc(db, "users", routeUserId), (snap) => {
+    const unsub = onSnapshot(doc(db, "users", routeUserId), (snap) => {
       if (snap.exists()) setChatUser(snap.data());
     });
+    return () => unsub();
   }, [routeUserId]);
 
-  /* ================= CHAT ROOM LISTENER + AUTO COMPLETE ================= */
   useEffect(() => {
     if (!roomId) return;
-
     const unsub = onSnapshot(doc(db, "chatRooms", roomId), async (snap) => {
       if (!snap.exists()) return;
-
       const data = snap.data();
       setRoomStatus(data.status);
-
-      // ⏱ AUTO COMPLETE AFTER 12 HOURS
+      
       if (data.status !== "completed" && isAfter12Hours(data.createdAt)) {
         await updateDoc(doc(db, "chatRooms", roomId), {
           status: "completed",
-          completedAt: new Date(),
+          completedAt: Timestamp.now(),
         });
       }
     });
-
-    return unsub;
+    return () => unsub();
   }, [roomId]);
 
-  /* ================= MESSAGES ================= */
   useEffect(() => {
     if (!roomId || !consultant?.id) return;
     setLoading(true);
-
-    unsubRef.current = listenToMessages(roomId, (msgs) => {
+    const unsub = listenToMessages(roomId, (msgs) => {
       setMessages(msgs);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+      setLoading(false);
     });
+    return () => unsub();
+  }, [roomId, consultant?.id]);
 
-    setLoading(false);
-    return () => unsubRef.current?.();
-  }, [roomId, consultant]);
-
-  /* ================= SEND MESSAGE ================= */
   const { sendTextMessage, sendFileMessage } = useSendMessage({
     roomId,
     senderId: consultant?.id,
@@ -127,259 +125,282 @@ export default function ChatRoom() {
   const isCompleted = roomStatus === "completed";
 
   const handleSend = async () => {
-    if (!text.trim() || isCompleted) return;
-    await sendTextMessage(text.trim());
+    if (!text.trim() || isCompleted || isSending) return;
+    const msgToSend = text.trim();
     setText("");
+    setIsSending(true);
+    try {
+      await sendTextMessage(msgToSend);
+    } catch (error) {
+      console.error("Send error:", error);
+      Alert.alert("Error", "Failed to send message.");
+    } finally {
+      setIsSending(false);
+    }
   };
 
-  const handleFileSend = async () => {
-    if (isCompleted) return;
+  const handleFileAction = async () => {
+    if (isCompleted || isSending) return;
     const file = await pickFile();
-    if (file) await sendFileMessage(file);
+    if (!file) return;
+    setIsSending(true);
+    try {
+      await sendFileMessage(file);
+    } catch (error) {
+      console.error("Upload error:", error);
+      Alert.alert("Error", "Failed to upload.");
+    } finally {
+      setIsSending(false);
+    }
   };
 
-  /* ================= CONFIRM COMPLETE ================= */
-  const confirmComplete = async () => {
-    await updateDoc(doc(db, "chatRooms", roomId), {
-      status: "completed",
-      completedAt: new Date(),
+  const handleCameraAction = async () => {
+    if (isCompleted || isSending) return;
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert("Permission Denied", "We need camera access.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.7,
     });
-    setConfirmVisible(false);
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setIsSending(true);
+      const imageAsset = result.assets[0];
+      try {
+        await sendFileMessage(imageAsset);
+      } catch (error) {
+        Alert.alert("Error", "Failed to upload photo.");
+      } finally {
+        setIsSending(false);
+      }
+    }
   };
 
-  /* ================= RENDER MESSAGE ================= */
+  const onLongPressMessage = (item) => {
+    const isMe = item.senderType === "consultant";
+    if (isMe && !item.unsent && consultant?.id) {
+      handleUnsendMessage(item, roomId, consultant.id, setMessages);
+    }
+  };
+
   const renderMsg = ({ item }) => {
     const isMe = item.senderType === "consultant";
+    const isImage = item.type === "image";
+    const isFile = item.type === "file";
+
     return (
-      <TouchableOpacity
-        style={[
-          styles.message,
-          isMe ? styles.myMessage : styles.theirMessage,
-        ]}
-        onLongPress={() =>
-          isMe && !item.unsent && handleUnsendMessage(item, roomId)
-        }
-      >
-        <Text style={{ color: isMe ? "#fff" : "#000" }}>
-          {item.unsent ? "🚫 Message unsent" : item.text}
-        </Text>
-      </TouchableOpacity>
+      <View style={[styles.messageWrapper, isMe ? styles.myWrapper : styles.theirWrapper]}>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => {
+            if (item.unsent) return;
+            if (isImage) setPreviewImage(item.fileUrl);
+            else if (isFile) Linking.openURL(item.fileUrl);
+          }}
+          onLongPress={() => onLongPressMessage(item)}
+          style={[
+            styles.messageBubble,
+            isMe ? styles.myBubble : styles.theirBubble,
+            (isImage || isFile) && !item.unsent && styles.mediaBubbleFix,
+            item.unsent && styles.unsentBubble,
+          ]}
+        >
+          {item.unsent ? (
+            <Text style={styles.unsentText}>🚫 Message unsent</Text>
+          ) : isImage ? (
+            <View style={styles.imageContainer}>
+              <Image source={{ uri: item.fileUrl }} style={styles.imageMsg} resizeMode="cover" />
+            </View>
+          ) : isFile ? (
+            <View style={styles.fileRow}>
+              <Ionicons name="document-text" size={24} color={isMe ? "#FFF" : "#01579B"} />
+              <Text style={[styles.fileText, isMe ? styles.myText : styles.theirText]} numberOfLines={1}>
+                {item.fileName || "Document"}
+              </Text>
+            </View>
+          ) : (
+            <Text style={[styles.messageText, isMe ? styles.myText : styles.theirText]}>
+              {item.text}
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
     );
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <View style={styles.container}>
-        {/* HEADER */}
-        <View style={styles.chatHeader}>
-          <View style={styles.avatar}>
-            <Image
-              source={
-                chatUser?.gender === "Female"
-                  ? require("../../assets/office-woman.png")
-                  : require("../../assets/office-man.png")
-              }
-              style={styles.avatarImage}
-            />
-          </View>
-          <View>
-            <Text style={styles.chatName}>{chatUser?.name || "Client"}</Text>
-            <Text style={styles.chatStatus}>
-              {chatUser?.isOnline
-                ? "Active now"
-                : formatLastSeen(chatUser?.lastSeen)}
-            </Text>
-          </View>
-        </View>
+    <View style={styles.mainContainer}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
 
-        {loading ? (
-          <ActivityIndicator />
-        ) : (
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            renderItem={renderMsg}
-            keyExtractor={(i) => i.id}
-            contentContainerStyle={{ paddingBottom: 180 }}
-          />
-        )}
-
-        {/* MARK AS COMPLETE */}
-        {!isCompleted && (
-          <View style={styles.completeWrap}>
-            <TouchableOpacity
-              style={styles.completeBtn}
-              onPress={() => setConfirmVisible(true)}
-            >
-              <Text style={styles.completeText}>Mark as Complete</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* INPUT */}
-        <View style={[styles.inputContainer, isCompleted && { opacity: 0.5 }]}>
-          <TouchableOpacity onPress={handleFileSend} disabled={isCompleted}>
-            <Text style={styles.attachText}>📎</Text>
-          </TouchableOpacity>
-
-          <TextInput
-            style={styles.input}
-            value={text}
-            onChangeText={setText}
-            editable={!isCompleted}
-            placeholder={
-              isCompleted ? "Chat is completed" : "Type a message..."
-            }
-          />
-
-          <TouchableOpacity
-            style={styles.sendBtn}
-            onPress={handleSend}
-            disabled={isCompleted}
-          >
-            <Text style={styles.sendText}>Send</Text>
-          </TouchableOpacity>
+      {/* HEADER: Outside KeyboardAvoidingView to keep it fixed */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={28} color="#0F3E48" />
+        </TouchableOpacity>
+        <Image
+          source={chatUser?.gender === "Female" ? require("../../assets/office-woman.png") : require("../../assets/office-man.png")}
+          style={styles.avatar}
+        />
+        <View style={{ marginLeft: 10, flex: 1 }}>
+          <Text style={styles.nameText} numberOfLines={1}>{chatUser?.name || "Client"}</Text>
+          <Text style={styles.statusText}>
+            {chatUser?.isOnline ? "Active now" : formatLastSeen(chatUser?.lastSeen)}
+          </Text>
         </View>
       </View>
 
-      {/* CONFIRM MODAL */}
-      <Modal transparent visible={confirmVisible} animationType="fade">
-        <View style={styles.modalBg}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>
-              Mark consultation as complete?
-            </Text>
-            <Text style={styles.modalDesc}>
-              You will no longer be able to chat after this.
-            </Text>
+      <KeyboardAvoidingView
+       style={{ flex: 1 }}
+       behavior={Platform.OS === "ios" ? "padding" : "height"} // Subukan ang "height" sa Android kung ayaw ng undefined
+       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      >
+        <View style={styles.chatArea}>
+          {loading ? (
+            <ActivityIndicator style={{ flex: 1 }} color="#005696" />
+          ) : (
+            <FlatList
+              data={chatMessages}
+              renderItem={renderMsg}
+              keyExtractor={(i) => i.id || Math.random().toString()}
+              contentContainerStyle={styles.listContent}
+              inverted 
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            />
+          )}
+        </View>
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => setConfirmVisible(false)}
-              >
-                <Text>Cancel</Text>
-              </TouchableOpacity>
+        <View style={styles.footer}>
+          <View style={styles.inputWrapper}>
+            <TouchableOpacity 
+              disabled={isCompleted}
+              onPress={handleFileAction}
+              style={styles.actionIcon}
+            >
+              <Ionicons name="add-circle" size={32} color={isCompleted ? "#CCC" : "#005696"} />
+            </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.modalConfirm}
-                onPress={confirmComplete}
-              >
-                <Text style={{ color: "#fff" }}>Confirm</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity 
+              disabled={isCompleted}
+              onPress={handleCameraAction}
+              style={styles.actionIcon}
+            >
+              <Ionicons name="camera" size={32} color={isCompleted ? "#CCC" : "#005696"} />
+            </TouchableOpacity>
+
+            <TextInput
+              style={styles.textInput}
+              value={text}
+              onChangeText={(t) => setText(t)}
+              placeholder={isCompleted ? "Chat closed" : "Type a message..."}
+              editable={!isCompleted}
+              multiline
+            />
+
+            <TouchableOpacity 
+              onPress={handleSend} 
+              disabled={!text.trim() || isSending || isCompleted}
+              style={[styles.sendBtn, (text.trim() && !isCompleted) ? styles.sendBtnActive : styles.sendBtnInactive]}
+            >
+              {isSending ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Ionicons name="send" size={18} color="#FFF" />
+              )}
+            </TouchableOpacity>
           </View>
         </View>
+      </KeyboardAvoidingView>
+
+      <Modal visible={!!previewImage} transparent animationType="fade">
+        <View style={styles.fullScreenOverlay}>
+          <TouchableOpacity style={styles.closePreview} onPress={() => setPreviewImage(null)}>
+            <Ionicons name="close" size={30} color="#FFF" />
+          </TouchableOpacity>
+          <Image source={{ uri: previewImage }} style={styles.fullImage} resizeMode="contain" />
+        </View>
       </Modal>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
-/* ================= STYLES ================= */
-
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 15, paddingTop: 40 },
-
-  chatHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderColor: "#E4E6EB",
+  mainContainer: { flex: 1, backgroundColor: "#F8F9FA" },
+  header: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    paddingHorizontal: 15, 
+    // Manual handling of padding to prevent double space or "sobrang taas"
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 55,
+    paddingBottom: 15,
+    borderBottomWidth: 1, 
+    borderBottomColor: "#E9ECEF",
+    backgroundColor: "#FFF",
+    zIndex: 100,
   },
-
-  avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    overflow: "hidden",
-    backgroundColor: "#E4E6EB",
-    marginRight: 10,
-  },
-  avatarImage: { width: "100%", height: "100%" },
-
-  chatName: { fontSize: 16, fontWeight: "700" },
-  chatStatus: { fontSize: 12, color: "#777" },
-
-  message: {
-    padding: 10,
-    marginVertical: 6,
-    maxWidth: "75%",
-    borderRadius: 16,
-  },
-  myMessage: { alignSelf: "flex-end", backgroundColor: "#0084FF" },
-  theirMessage: { alignSelf: "flex-start", backgroundColor: "#E4E6EB" },
-
-  completeWrap: {
-    position: "absolute",
-    bottom: 60,
-    left: 15,
-  },
-  completeBtn: {
-    borderWidth: 1,
-    borderColor: "#008000",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  backBtn: { padding: 5 },
+  avatar: { width: 40, height: 40, borderRadius: 20, marginLeft: 5 },
+  nameText: { fontSize: 17, fontWeight: "700", color: "#343A40" },
+  statusText: { fontSize: 13, color: "#6C757D" },
+  chatArea: { flex: 1, backgroundColor: "#F8F9FA" },
+  listContent: { paddingHorizontal: 15, paddingVertical: 20 },
+  messageWrapper: { marginVertical: 4, flexDirection: "row" },
+  myWrapper: { justifyContent: "flex-end" },
+  theirWrapper: { justifyContent: "flex-start" },
+  messageBubble: { 
+    maxWidth: "75%", 
+    paddingVertical: 10, 
+    paddingHorizontal: 16, 
     borderRadius: 20,
+    elevation: 1,
   },
-  completeText: { color: "#008000", fontWeight: "700" },
-
-  inputContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
+  mediaBubbleFix: { padding: 0, overflow: 'hidden' },
+  myBubble: { backgroundColor: "#005696", borderBottomRightRadius: 4 },
+  theirBubble: { backgroundColor: "#FFF", borderBottomLeftRadius: 4, borderWidth: 1, borderColor: "#E9ECEF" },
+  unsentBubble: { opacity: 0.6, borderStyle: "dashed", borderWidth: 1, borderColor: '#CBD5E1', backgroundColor: '#F8FAFC' },
+  messageText: { fontSize: 16, lineHeight: 22 },
+  myText: { color: "#FFF" },
+  theirText: { color: "#495057" },
+  unsentText: { color: "#8f2f52", fontStyle: 'italic', fontSize: 13, fontWeight: "600" },
+  imageContainer: { width: 240, height: 180, backgroundColor: '#E2E8F0' },
+  imageMsg: { width: "100%", height: "100%" },
+  fileRow: { flexDirection: "row", alignItems: "center", padding: 14, minWidth: 200, gap: 12 },
+  fileText: { flex: 1, fontWeight: "600", fontSize: 14, color: "#FFF" },
+  footer: { 
+    backgroundColor: "#FFF", 
+    borderTopWidth: 1, 
+    borderTopColor: "#E9ECEF", 
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    // Para hindi magbago ang sukat ng footer kahit mag-type
+    paddingBottom: Platform.OS === 'ios' ? 35 : 15, 
+    height: Platform.OS === 'ios' ? 100 : 80, 
+    justifyContent: 'center', 
+  },
+  inputWrapper: { 
+    flexDirection: "row", 
     alignItems: "center",
-    padding: 10,
-    backgroundColor: "#F0F2F5",
+    height: 50, 
+    justifyContent: "space-between" 
   },
-  attachText: { fontSize: 22, marginRight: 10 },
-  input: {
-    flex: 1,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    backgroundColor: "#fff",
-    borderRadius: 20,
+  textInput: { 
+    flex: 1, 
+    marginHorizontal: 8, 
+    backgroundColor: "#F1F3F5", 
+    borderRadius: 25, 
+    paddingHorizontal: 18, 
+    paddingVertical: Platform.OS === 'ios' ? 12 : 8,
+    maxHeight: 100,
+    fontSize: 16,
+    color: '#212529'
   },
-  sendBtn: {
-    marginLeft: 10,
-    backgroundColor: "#0084FF",
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 20,
-  },
-  sendText: { color: "#fff", fontWeight: "700" },
-
-  modalBg: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalBox: {
-    backgroundColor: "#fff",
-    padding: 20,
-    width: "80%",
-    borderRadius: 12,
-  },
-  modalTitle: { fontSize: 16, fontWeight: "700" },
-  modalDesc: { marginTop: 6, color: "#555" },
-
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: 20,
-    gap: 10,
-  },
-  modalCancel: { padding: 8 },
-  modalConfirm: {
-    backgroundColor: "#008000",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 6,
-  },
+  actionIcon: { padding: 4 },
+  sendBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  sendBtnActive: { backgroundColor: "#005696" },
+  sendBtnInactive: { backgroundColor: "#CED4DA" },
+  fullScreenOverlay: { flex: 1, backgroundColor: "black", justifyContent: "center" },
+  closePreview: { position: 'absolute', top: 50, right: 20, zIndex: 10 },
+  fullImage: { width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.8 },
 });

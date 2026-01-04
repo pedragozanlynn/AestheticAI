@@ -20,9 +20,14 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  StatusBar,
+  SafeAreaView,
+  KeyboardAvoidingView,
+  Platform
 } from "react-native";
 import { db } from "../../config/firebase";
 import BottomNavbar from "../components/BottomNav";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function EarningsScreen() {
   const [entries, setEntries] = useState([]);
@@ -30,14 +35,14 @@ export default function EarningsScreen() {
   const [withdrawVisible, setWithdrawVisible] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [gcashNumber, setGcashNumber] = useState("");
-  const [activeTab, setActiveTab] = useState("all"); // ✅ TAB STATE
+  const [activeTab, setActiveTab] = useState("all");
 
   const auth = getAuth();
-  const consultantUid = auth.currentUser.uid;
+  const consultantUid = auth?.currentUser?.uid;
 
   /* ================= LOAD EARNINGS ================= */
-
   useEffect(() => {
+    if (!consultantUid) return;
     const ref = collection(db, "payments");
     const q = query(
       ref,
@@ -55,10 +60,8 @@ export default function EarningsScreen() {
             try {
               const userDoc = await getDoc(doc(db, "users", data.userId));
               if (userDoc.exists()) {
-                userName =
-                  userDoc.data().name ||
-                  userDoc.data().fullName ||
-                  "User";
+                const userData = userDoc.data();
+                userName = userData.name || userData.fullName || "User";
               }
             } catch {}
           }
@@ -79,14 +82,10 @@ export default function EarningsScreen() {
     return unsubscribe;
   }, [consultantUid]);
 
-  /* ================= BALANCE ================= */
-
   const total = entries.reduce(
     (sum, e) => sum + (Number(e.consultantAmount) || 0),
     0
   );
-
-  /* ================= FILTER ================= */
 
   const filteredEntries = entries.filter((item) => {
     if (activeTab === "all") return true;
@@ -96,14 +95,11 @@ export default function EarningsScreen() {
     return true;
   });
 
-  /* ================= WITHDRAW ================= */
-
   const submitWithdraw = async () => {
     if (!withdrawAmount.trim() || !gcashNumber.trim()) {
       Alert.alert("Missing Info", "Please enter amount and GCash number.");
       return;
     }
-
     const amountNum = parseFloat(withdrawAmount);
     if (amountNum <= 0 || amountNum > total) {
       Alert.alert("Invalid Amount", "Withdrawal exceeds balance.");
@@ -128,11 +124,7 @@ export default function EarningsScreen() {
         status: "pending",
       });
 
-      Alert.alert(
-        "Success",
-        "Withdrawal request submitted and awaiting admin approval."
-      );
-
+      Alert.alert("Success", "Withdrawal request submitted.");
       setWithdrawVisible(false);
       setWithdrawAmount("");
       setGcashNumber("");
@@ -141,122 +133,143 @@ export default function EarningsScreen() {
     }
   };
 
-  /* ================= UI ================= */
+  const renderTransaction = ({ item }) => {
+    const isEarning = item.type === "consultant_earning" || item.type === "withdraw_reversal";
+    const isWithdraw = item.type === "withdraw";
+
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardIconWrap(item.type)}>
+          <Ionicons 
+            name={isEarning ? "arrow-down-outline" : "arrow-up-outline"} 
+            size={20} 
+            color={isEarning ? "#065F46" : "#991B1B"} 
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.cardTitle}>
+            {item.type === "consultant_earning" ? "Consultation Fee" : 
+             item.type === "withdraw" ? "Withdrawal" : "Refund Reversal"}
+          </Text>
+          <Text style={styles.cardDate}>
+            {item.createdAt?.toDate().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+          </Text>
+        </View>
+        <Text style={[styles.amount, { color: isEarning ? "#059669" : "#DC2626" }]}>
+          {isEarning ? "+" : "-"} ₱{Math.abs(item.consultantAmount).toFixed(2)}
+        </Text>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
-      {/* BALANCE */}
-      <View style={styles.balanceCard}>
-        <View>
-          <Text style={styles.balanceLabel}>Your Balance</Text>
-          <Text style={styles.balanceAmount}>₱ {total.toFixed(2)}</Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.balanceWithdrawBtn}
-          onPress={() => setWithdrawVisible(true)}
-        >
-          <Text style={styles.balanceWithdrawText}>Withdraw</Text>
-        </TouchableOpacity>
-      </View>
-      <Text style={styles.historyTitle}>Transaction History</Text>
-
-      {/* TABS */}
-      <View style={styles.tabsRow}>
-        {["all", "earned", "withdraw", "reversal"].map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[
-              styles.tabBtn,
-              activeTab === tab && styles.tabActive,
-            ]}
-            onPress={() => setActiveTab(tab)}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === tab && styles.tabTextActive,
-              ]}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-
-      {/* LIST */}
-      {loading ? (
-        <Text>Loading...</Text>
-      ) : (
-        <FlatList
-          data={filteredEntries}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              {item.type === "consultant_earning" && (
-                <Text style={[styles.amount, { color: "#2ecc71" }]}>
-                  Earned ₱ {item.consultantAmount.toFixed(2)}
-                </Text>
-              )}
-
-              {item.type === "withdraw" && (
-                <Text style={[styles.amount, { color: "red" }]}>
-                  Withdraw ₱ {Math.abs(item.consultantAmount).toFixed(2)}
-                </Text>
-              )}
-
-              {item.type === "withdraw_reversal" && (
-                <Text style={[styles.amount, { color: "orange" }]}>
-                  Reversal ₱ {item.consultantAmount.toFixed(2)}
-                </Text>
-              )}
-
-              <Text style={styles.date}>
-                {item.createdAt?.toDate().toLocaleString()}
-              </Text>
+      <StatusBar barStyle="light-content" />
+      
+      <View style={styles.headerArea}>
+        <SafeAreaView>
+          <View style={styles.balanceCard}>
+            <View>
+              <Text style={styles.balanceLabel}>Available Balance</Text>
+              <Text style={styles.balanceAmount}>₱ {total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
             </View>
-          )}
-        />
-      )}
-
-      {/* WITHDRAW MODAL */}
-      <Modal visible={withdrawVisible} transparent animationType="slide">
-        <View style={styles.modalContainer}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Withdraw Earnings</Text>
-
-            <Text style={styles.inputLabel}>Amount (₱)</Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="numeric"
-              value={withdrawAmount}
-              onChangeText={setWithdrawAmount}
-            />
-
-            <Text style={styles.inputLabel}>GCash Number</Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="phone-pad"
-              value={gcashNumber}
-              onChangeText={setGcashNumber}
-            />
-
             <TouchableOpacity
-              style={styles.submitBtn}
-              onPress={submitWithdraw}
+              style={styles.balanceWithdrawBtn}
+              onPress={() => setWithdrawVisible(true)}
+              activeOpacity={0.8}
             >
-              <Text style={styles.submitText}>Submit Withdraw</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={() => setWithdrawVisible(false)}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Ionicons name="wallet-outline" size={18} color="#FFF" style={{marginRight: 6}} />
+              <Text style={styles.balanceWithdrawText}>Withdraw</Text>
             </TouchableOpacity>
           </View>
+        </SafeAreaView>
+      </View>
+
+      <View style={styles.content}>
+        <Text style={styles.historyTitle}>Transactions</Text>
+        
+        <View style={styles.tabsRow}>
+          {["all", "earned", "withdraw", "reversal"].map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.tabBtn, activeTab === tab && styles.tabActive]}
+              onPress={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                {tab === "all" ? "All" : tab === "earned" ? "Fees" : tab === "withdraw" ? "Paid" : "Rev"}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
+
+        {loading ? (
+          <View style={styles.center}>
+             <Text style={styles.loadingText}>Updating balance...</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredEntries}
+            keyExtractor={(item) => item.id}
+            renderItem={renderTransaction}
+            contentContainerStyle={{ paddingBottom: 120 }}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.emptyBox}>
+                <Ionicons name="receipt-outline" size={50} color="#CBD5E1" />
+                <Text style={styles.emptyText}>No transactions in this category</Text>
+              </View>
+            }
+          />
+        )}
+      </View>
+
+      {/* WITHDRAW MODAL */}
+      <Modal visible={withdrawVisible} transparent animationType="fade">
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalBox}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Withdraw via GCash</Text>
+              <TouchableOpacity onPress={() => setWithdrawVisible(false)}>
+                <Ionicons name="close" size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Withdrawal Amount</Text>
+              <View style={styles.inputWrap}>
+                <Text style={styles.currencyPrefix}>₱</Text>
+                <TextInput
+                  style={styles.input}
+                  keyboardType="numeric"
+                  placeholder="0.00"
+                  value={withdrawAmount}
+                  onChangeText={setWithdrawAmount}
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>GCash Mobile Number</Text>
+              <View style={styles.inputWrap}>
+                <Ionicons name="phone-portrait-outline" size={18} color="#94A3B8" style={{marginLeft: 10}} />
+                <TextInput
+                  style={[styles.input, { paddingLeft: 10 }]}
+                  keyboardType="phone-pad"
+                  placeholder="0912 345 6789"
+                  value={gcashNumber}
+                  onChangeText={setGcashNumber}
+                />
+              </View>
+            </View>
+
+            <TouchableOpacity style={styles.submitBtn} onPress={submitWithdraw}>
+              <Text style={styles.submitText}>Submit Request</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <BottomNavbar role="consultant" />
@@ -264,113 +277,46 @@ export default function EarningsScreen() {
   );
 }
 
-/* ================= STYLES ================= */
-
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#F3F9FA" },
+  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  headerArea: { backgroundColor: "#01579B", paddingBottom: 20 , paddingTop:10,},
+  balanceCard: { paddingHorizontal: 25, paddingTop: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  balanceLabel: { fontSize: 13, color: "rgba(255,255,255,0.7)", fontWeight: '600' },
+  balanceAmount: { fontSize: 32, fontWeight: "900", color: "#fff", marginTop: 2 },
+  balanceWithdrawBtn: { backgroundColor: "#3fa796", paddingVertical: 10, paddingHorizontal: 16, borderRadius: 15, flexDirection: 'row', alignItems: 'center' },
+  balanceWithdrawText: { color: "#fff", fontWeight: "700", fontSize: 14 },
 
-  balanceCard: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 22,
-    borderRadius: 20,
-    backgroundColor: "#01579B",
-    marginBottom: 16,
-  },
-  balanceLabel: { fontSize: 15, color: "#BBDEFB" },
-  balanceAmount: { fontSize: 28, fontWeight: "900", color: "#fff" },
+  content: { flex: 1, paddingHorizontal: 20, paddingTop: 25 },
+  historyTitle: { fontSize: 18, fontWeight: "800", color: "#1E293B", marginBottom: 15 },
 
-  balanceWithdrawBtn: {
-    backgroundColor: "#3fa796",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-  },
-  balanceWithdrawText: { color: "#fff", fontWeight: "700" },
-
-  tabsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  tabBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    marginHorizontal: 4,
-    borderRadius: 20,
-    backgroundColor: "#E0E0E0",
-    alignItems: "center",
-  },
-  tabActive: {
-    backgroundColor: "#8f2f52",
-  },
-  tabText: { fontSize: 12, fontWeight: "700", color: "#555" },
+  tabsRow: { flexDirection: "row", marginBottom: 20, gap: 8 },
+  tabBtn: { flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: "#F1F5F9", alignItems: "center" },
+  tabActive: { backgroundColor: "#01579B" },
+  tabText: { fontSize: 11, fontWeight: "800", color: "#64748B" },
   tabTextActive: { color: "#fff" },
 
-  historyTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    marginBottom: 10,
-    color: "#0F3E48",
-  },
-  card: {
-    padding: 18,
-    borderRadius: 16,
-    marginBottom: 14,
-    backgroundColor: "#fff",
-  
-    // ✨ visual upgrade
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
-  
-    // ✨ subtle left accent (transaction feel)
-    borderLeftWidth: 4,
-    borderLeftColor: "#8f2f52",
-  },
-  
-  amount: { fontSize: 18, fontWeight: "700" },
-  date: { marginTop: 6, color: "#555", fontSize: 13 },
+  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: "#fff", padding: 16, borderRadius: 20, marginBottom: 12, elevation: 2, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 10 },
+  cardIconWrap: (type) => ({ width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15, backgroundColor: type.includes('withdraw') ? '#FEE2E2' : '#D1FAE5' }),
+  cardTitle: { fontSize: 15, fontWeight: "800", color: "#1E293B" },
+  cardDate: { fontSize: 12, color: "#94A3B8", marginTop: 2 },
+  amount: { fontSize: 16, fontWeight: "900" },
 
-  modalContainer: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    padding: 24,
-  },
-  modalBox: {
-    backgroundColor: "#fff",
-    padding: 30,
-    borderRadius: 18,
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  inputLabel: { fontWeight: "600", marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 14,
-  },
-  submitBtn: {
-    backgroundColor: "#0277BD",
-    padding: 15,
-    borderRadius: 12,
-  },
-  submitText: {
-    color: "#fff",
-    textAlign: "center",
-    fontWeight: "700",
-    fontSize: 17,
-  },
-  cancelBtn: { marginTop: 14, padding: 12 },
-  cancelText: { textAlign: "center", fontWeight: "600" },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.6)", justifyContent: "center", padding: 25 },
+  modalBox: { backgroundColor: "#fff", borderRadius: 30, padding: 25, elevation: 20 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitle: { fontSize: 20, fontWeight: "900", color: "#1E293B" },
+  
+  inputGroup: { marginBottom: 18 },
+  inputLabel: { fontSize: 13, fontWeight: "700", color: "#64748B", marginBottom: 8 },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 15, borderWidth: 1, borderColor: '#E2E8F0' },
+  currencyPrefix: { fontSize: 16, fontWeight: '700', color: '#1E293B', marginLeft: 15 },
+  input: { flex: 1, padding: 15, fontSize: 16, color: '#1E293B', fontWeight: '600' },
+  
+  submitBtn: { backgroundColor: "#01579B", paddingVertical: 16, borderRadius: 15, marginTop: 10, elevation: 4, shadowColor: '#01579B', shadowOpacity: 0.3, shadowRadius: 8 },
+  submitText: { color: "#fff", textAlign: "center", fontWeight: "800", fontSize: 16 },
+
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { color: '#64748B', fontWeight: '600' },
+  emptyBox: { alignItems: 'center', marginTop: 50 },
+  emptyText: { color: "#94A3B8", marginTop: 10, fontWeight: "600" }
 });

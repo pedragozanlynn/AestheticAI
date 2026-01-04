@@ -135,7 +135,7 @@ export default function BottomNavbar({
 const styles = StyleSheet.create({
   wrapper: {
     position: "absolute",
-    bottom: 15, // Floating effect
+    bottom: 10, // Floating effect
     width: width,
     alignItems: "center",
   },

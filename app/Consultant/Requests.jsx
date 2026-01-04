@@ -1,35 +1,34 @@
-// screens/Consultant/Requests.jsx
-
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   doc,
   getDoc,
   getDocs,
   query,
+  serverTimestamp,
   updateDoc,
   where,
+  setDoc, // Idinagdag para sa ChatRoom creation
 } from "firebase/firestore";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  SafeAreaView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { db } from "../../config/firebase";
-import { ensureChatRoom } from "../../services/chatService";
 import BottomNavbar from "../components/BottomNav";
 
-/* ================= STATUS TABS ================= */
 const TABS = ["pending", "accepted", "declined", "cancelled"];
 
-/* ================= STATUS NORMALIZER ================= */
 const normalizeStatus = (s) => {
   if (!s) return "pending";
   const v = s.toLowerCase();
@@ -48,7 +47,6 @@ export default function Requests() {
   const [activeTab, setActiveTab] = useState("pending");
   const [loading, setLoading] = useState(true);
 
-  /* ================= AUTH LISTENER ================= */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       if (user) setAuthUid(user.uid);
@@ -56,30 +54,23 @@ export default function Requests() {
     return unsub;
   }, []);
 
-  /* ================= FETCH APPOINTMENTS ================= */
   const fetchRequests = async () => {
     if (!authUid) return;
-
     try {
       setLoading(true);
-
       const q = query(
         collection(db, "appointments"),
         where("consultantId", "==", authUid)
       );
-
       const snap = await getDocs(q);
       const results = [];
-
       for (const d of snap.docs) {
         const data = d.data();
-
         const item = {
           id: d.id,
           ...data,
           status: normalizeStatus(data.status),
         };
-
         const uSnap = await getDoc(doc(db, "users", item.userId));
         if (uSnap.exists()) {
           const u = uSnap.data();
@@ -89,10 +80,8 @@ export default function Requests() {
           item.userName = "Unknown User";
           item.userEmail = "N/A";
         }
-
         results.push(item);
       }
-
       setRequests(results);
     } catch (err) {
       console.log("❌ Fetch requests error:", err);
@@ -105,101 +94,150 @@ export default function Requests() {
     if (authUid) fetchRequests();
   }, [authUid]);
 
-  /* ================= ACTIONS ================= */
   const acceptRequest = async (item) => {
-    const roomId = `appointment_${item.id}`;
+    if (!authUid) return;
 
-    await updateDoc(doc(db, "appointments", item.id), {
-      status: "accepted",
-      chatRoomId: roomId,
-    });
+    try {
+      const appointmentRef = doc(db, "appointments", item.id);
+      const chatRoomRef = doc(db, "chatRooms", item.id);
 
-    await ensureChatRoom(item.id, item.userId, authUid);
-    fetchRequests();
+      // 1. I-update ang Appointment status
+      await updateDoc(appointmentRef, {
+        status: "accepted",
+        chatRoomId: item.id,
+        acceptedAt: serverTimestamp(),
+      });
+
+      // 2. I-check at gawin ang ChatRoom
+      const chatRoomSnap = await getDoc(chatRoomRef);
+      if (!chatRoomSnap.exists()) {
+        await setDoc(chatRoomRef, {
+          appointmentId: item.id,
+          consultantId: authUid,
+          userId: item.userId,
+          createdAt: serverTimestamp(),
+          lastMessage: "Consultation started.",
+          lastMessageAt: serverTimestamp(),
+          lastSenderId: "",
+          lastSenderType: "",
+          ratingSubmitted: false,
+          status: "ongoing",
+          unreadForConsultant: false,
+          unreadForUser: true,
+        });
+      }
+
+      Alert.alert("Success", "Request accepted!");
+      fetchRequests(); // I-refresh para lumipat sa Accepted tab
+    } catch (error) {
+      console.error("❌ Error sa acceptRequest:", error);
+      Alert.alert("Error", "Failed to accept request. Please check permissions.");
+    }
   };
 
   const declineRequest = async (item) => {
-    await updateDoc(doc(db, "appointments", item.id), {
-      status: "declined",
-    });
-    fetchRequests();
+    try {
+      await updateDoc(doc(db, "appointments", item.id), {
+        status: "declined",
+      });
+      fetchRequests();
+    } catch (error) {
+      console.error("❌ Decline error:", error);
+    }
   };
 
-  /* ✅ SAFETY GUARD */
   const openChat = (item) => {
     if (item.status === "completed") {
-      Alert.alert(
-        "Consultation Completed",
-        "This chat is already completed and can no longer be opened."
-      );
+      Alert.alert("Consultation Completed", "This chat is already completed.");
       return;
     }
-
     router.push({
       pathname: "/Consultant/ChatRoom",
       params: {
-        roomId: item.chatRoomId,
+        roomId: item.chatRoomId || item.id, // Safety fallback
         userId: item.userId,
         appointmentId: item.id,
       },
     });
   };
 
-  /* ================= FILTER ================= */
   const filtered = requests.filter((r) =>
     activeTab === "accepted"
       ? r.status === "accepted" || r.status === "completed"
       : r.status === activeTab
   );
 
-  /* ================= RENDER ITEM ================= */
   const renderItem = ({ item }) => (
     <View style={styles.card}>
-      <View style={styles.topRow}>
-        <Text style={styles.clientName}>{item.userName}</Text>
-        <Text style={styles.status(item.status)}>
-          {item.status.toUpperCase()}
-        </Text>
+      <View style={styles.cardHeader}>
+        <View style={styles.clientInfo}>
+          <View style={styles.avatarMini}>
+            <Text style={styles.avatarText}>{item.userName.charAt(0)}</Text>
+          </View>
+          <View>
+            <Text style={styles.clientName}>{item.userName}</Text>
+            <Text style={styles.clientEmail}>{item.userEmail}</Text>
+          </View>
+        </View>
+        <View style={[styles.statusBadge, styles.statusBg(item.status)]}>
+          <Text style={styles.statusText(item.status)}>
+            {item.status.toUpperCase()}
+          </Text>
+        </View>
       </View>
 
-      <View style={styles.infoBlock}>
-        <Text style={styles.detail}>{item.userEmail}</Text>
+      <View style={styles.divider} />
 
-        <View style={styles.dateRow}>
-          <Text style={styles.detail}>
-            {item.appointmentAt?.toDate?.().toLocaleDateString()}
-          </Text>
-
-          {/* ✅ ONLY ACCEPTED */}
-          {item.status === "accepted" && (
-            <TouchableOpacity
-              style={[styles.btn, styles.chatBtn]}
-              onPress={() => openChat(item)}
-            >
-              <Text style={styles.btnTextLight}>Open Chat</Text>
-            </TouchableOpacity>
-          )}
+      <View style={styles.cardBody}>
+        <View style={styles.dateTimeContainer}>
+          <View style={styles.infoRow}>
+            <Ionicons name="calendar-outline" size={14} color="#64748B" />
+            <Text style={styles.detailText}>
+              {item.appointmentAt?.toDate?.().toLocaleDateString("en-PH", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              }) || "N/A"}
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="time-outline" size={14} color="#64748B" />
+            <Text style={styles.detailText}>
+              {item.appointmentAt?.toDate?.().toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              }) || "N/A"}
+            </Text>
+          </View>
         </View>
 
-        <Text style={styles.detail}>
-          {item.appointmentAt?.toDate?.().toLocaleTimeString()}
-        </Text>
+        {(item.status === "accepted" || item.status === "ongoing") && (
+          <TouchableOpacity style={styles.chatBtn} onPress={() => openChat(item)}>
+            <Ionicons name="chatbubbles" size={16} color="#FFF" style={{ marginRight: 6 }} />
+            <Text style={styles.chatBtnText}>Open Chat</Text>
+          </TouchableOpacity>
+        )}
       </View>
+
+      {item.notes ? (
+        <View style={styles.notesBox}>
+          <View style={styles.notesHeader}>
+            <Ionicons name="document-text-outline" size={14} color="#475569" />
+            <Text style={styles.notesLabel}>Client Notes</Text>
+          </View>
+          <Text style={styles.notesText} numberOfLines={3} ellipsizeMode="tail">
+            {item.notes}
+          </Text>
+        </View>
+      ) : null}
 
       {item.status === "pending" && (
         <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.btn, styles.acceptBtn]}
-            onPress={() => acceptRequest(item)}
-          >
-            <Text style={styles.btnTextLight}>Accept</Text>
+          <TouchableOpacity style={styles.acceptBtn} onPress={() => acceptRequest(item)}>
+            <Text style={styles.acceptBtnText}>Accept</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.btn, styles.cancelBtn]}
-            onPress={() => declineRequest(item)}
-          >
-            <Text style={styles.btnTextDark}>Decline</Text>
+          <TouchableOpacity style={styles.declineBtn} onPress={() => declineRequest(item)}>
+            <Text style={styles.declineBtnText}>Decline</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -208,37 +246,52 @@ export default function Requests() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerWrap}>
-        <Text style={styles.header}>Consultation Requests</Text>
-        <Text style={styles.subHeader}>
-          Manage and review your appointments
-        </Text>
+      <StatusBar barStyle="light-content" />
+
+      <View style={styles.headerArea}>
+        <SafeAreaView>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>Consultations</Text>
+            <Text style={styles.headerSub}>Review and manage your sessions</Text>
+          </View>
+        </SafeAreaView>
       </View>
 
-      <View style={styles.tabRow}>
-        {TABS.map((t) => (
-          <TouchableOpacity key={t} onPress={() => setActiveTab(t)}>
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === t && styles.activeTabText,
-              ]}
+      <View style={styles.tabContainer}>
+        <View style={styles.tabRow}>
+          {TABS.map((t) => (
+            <TouchableOpacity
+              key={t}
+              onPress={() => setActiveTab(t)}
+              style={[styles.tabItem, activeTab === t && styles.activeTabItem]}
             >
-              {t.toUpperCase()}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text style={[styles.tabLabel, activeTab === t && styles.activeTabLabel]}>
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+              </Text>
+              {activeTab === t && <View style={styles.tabIndicator} />}
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" />
-      ) : filtered.length === 0 ? (
-        <Text style={styles.empty}>No {activeTab} appointments.</Text>
+        <View style={styles.centerLoader}>
+          <ActivityIndicator size="large" color="#01579B" />
+          <Text style={styles.loadingText}>Fetching schedules...</Text>
+        </View>
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={(i) => i.id}
           renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.emptyBox}>
+              <Ionicons name="calendar-outline" size={60} color="#CBD5E1" />
+              <Text style={styles.emptyText}>No {activeTab} appointments found</Text>
+            </View>
+          }
         />
       )}
 
@@ -247,80 +300,46 @@ export default function Requests() {
   );
 }
 
-/* ================= STYLES ================= */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F3F9FA" },
-  headerWrap: {
-    alignItems: "center",
-    backgroundColor: "#01579B",
-    paddingTop: 50,
-    paddingBottom: 16,
-  },
-  header: { fontSize: 22, fontWeight: "900", color: "#fff" },
-  subHeader: { fontSize: 14, color: "#E0F7FA" },
-
-  tabRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    backgroundColor: "#fff",
-    paddingVertical: 10,
-  },
-
-  tabText: { fontWeight: "700", fontSize: 12, color: "#999" },
-  activeTabText: { color: "#01579B" },
-
-  card: {
-    backgroundColor: "#fff",
-    padding: 20,
-    borderRadius: 12,
-    marginTop: 16,
-    marginHorizontal: 16,
-    borderLeftWidth: 3,
-    borderLeftColor: "#912f56",
-  },
-
-  topRow: { flexDirection: "row", justifyContent: "space-between" },
-  clientName: { fontSize: 16, fontWeight: "700", color: "#01579B" },
-
-  infoBlock: { marginTop: 4 },
-  dateRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  detail: { fontSize: 13, color: "#455A64" },
-
-  actionRow: { flexDirection: "row", gap: 8, marginTop: 12 },
-
-  btn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 },
-  acceptBtn: { backgroundColor: "#2c4f4f" },
-  chatBtn: { backgroundColor: "#3fa796" },
-  cancelBtn: { borderWidth: 1, borderColor: "#912f56" },
-
-  btnTextLight: { color: "#fff", fontWeight: "700", fontSize: 12 },
-  btnTextDark: { color: "#912f56", fontWeight: "700", fontSize: 12 },
-
-  status: (s) => ({
-    fontSize: 11,
-    fontWeight: "700",
-    paddingVertical: 3,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    backgroundColor:
-      s === "completed"
-        ? "#E0E0E0"
-        : s === "accepted"
-        ? "#D1F2EB"
-        : s === "pending"
-        ? "#FFF3CD"
-        : "#F8D7DA",
-  }),
-
-  empty: {
-    textAlign: "center",
-    marginTop: 20,
-    color: "#90A4AE",
-    fontStyle: "italic",
-  },
+  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  headerArea: { backgroundColor: "#01579B", paddingBottom: 25, paddingTop: 20 },
+  headerContent: { paddingHorizontal: 25, paddingTop: 20 },
+  headerTitle: { fontSize: 26, fontWeight: "900", color: "#fff" },
+  headerSub: { fontSize: 14, color: "rgba(255,255,255,0.7)", marginTop: 4 },
+  tabContainer: { backgroundColor: "#FFF", marginTop: 20, marginHorizontal: 20, borderRadius: 20, elevation: 4 },
+  tabRow: { flexDirection: "row", paddingHorizontal: 10 },
+  tabItem: { paddingVertical: 15, flex: 1, alignItems: "center" },
+  tabLabel: { fontSize: 12, fontWeight: "700", color: "#94A3B8" },
+  activeTabLabel: { color: "#01579B" },
+  tabIndicator: { position: "absolute", bottom: 10, width: 20, height: 3, backgroundColor: "#01579B", borderRadius: 2 },
+  listContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 100 },
+  card: { backgroundColor: "#fff", borderRadius: 24, padding: 20, marginBottom: 16 },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between" },
+  clientInfo: { flexDirection: "row", alignItems: "center" },
+  avatarMini: { width: 40, height: 40, borderRadius: 12, backgroundColor: "#E0F2F1", justifyContent: "center", alignItems: "center", marginRight: 12 },
+  avatarText: { color: "#01579B", fontWeight: "bold", fontSize: 16 },
+  clientName: { fontSize: 16, fontWeight: "800", color: "#1E293B" },
+  clientEmail: { fontSize: 12, color: "#64748B" },
+  statusBadge: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 10 },
+  statusText: (s) => ({ fontSize: 10, fontWeight: "800", color: s === "pending" ? "#B45309" : s === "accepted" ? "#065F46" : "#7F1D1D" }),
+  statusBg: (s) => ({ backgroundColor: s === "pending" ? "#FEF3C7" : s === "accepted" ? "#D1FAE5" : "#FEE2E2" }),
+  divider: { height: 1, backgroundColor: "#F1F5F9", marginVertical: 15 },
+  cardBody: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  infoRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  detailText: { fontSize: 13, color: "#475569", fontWeight: "500" },
+  chatBtn: { backgroundColor: "#01579B", flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 10, borderRadius: 14 },
+  chatBtnText: { color: "#fff", fontWeight: "700", fontSize: 13 },
+  actionRow: { flexDirection: "row", gap: 10, marginTop: 15 },
+  acceptBtn: { flex: 1, backgroundColor: "#3fa796", paddingVertical: 12, borderRadius: 14, alignItems: "center" },
+  acceptBtnText: { color: "#fff", fontWeight: "800", fontSize: 13 },
+  declineBtn: { flex: 1, backgroundColor: "#FFF", paddingVertical: 12, borderRadius: 14, alignItems: "center", borderWidth: 1, borderColor: "#E2E8F0" },
+  declineBtnText: { color: "#912f56", fontWeight: "800", fontSize: 13 },
+  centerLoader: { flex: 1, justifyContent: "center", alignItems: "center" },
+  loadingText: { marginTop: 10, color: "#64748B" },
+  emptyBox: { alignItems: "center", justifyContent: "center", marginTop: 80, padding: 30 },
+  emptyText: { color: "#64748B", marginTop: 12, fontWeight: "600", fontSize: 14 },
+  notesBox: { marginTop: 14, backgroundColor: "#F8FAFC", padding: 12, borderRadius: 14, borderWidth: 1, borderColor: "#E2E8F0" },
+  notesHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
+  notesLabel: { fontSize: 12, fontWeight: "700", color: "#475569" },
+  notesText: { fontSize: 13, color: "#334155", lineHeight: 18 },
 });

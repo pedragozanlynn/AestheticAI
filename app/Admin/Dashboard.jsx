@@ -14,7 +14,8 @@ import {
   TouchableOpacity,
   View,
   StatusBar,
-  SafeAreaView
+  SafeAreaView,
+  Platform
 } from "react-native";
 import { LineChart, PieChart } from "react-native-chart-kit";
 import { auth, db } from "../../config/firebase";
@@ -117,9 +118,10 @@ export default function Dashboard() {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#F4F7FA" }}>
-      <StatusBar barStyle="dark-content" />
+      {/* 1. Tinitiyak na ang status bar ay visible at may background */}
+      <StatusBar barStyle="dark-content" backgroundColor="#FFF" translucent={false} />
       
-      {/* HEADER - Laging visible */}
+      {/* 2. SafeAreaView wrapper para sa Header */}
       <SafeAreaView style={styles.headerSafe}>
         <View style={styles.headerRow}>
           <View>
@@ -275,8 +277,21 @@ const lineChartConfig = {
 };
 
 const styles = StyleSheet.create({
-  headerSafe: { backgroundColor: '#FFF', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 30, paddingVertical: 25 },
+  headerSafe: { 
+    backgroundColor: '#FFF', 
+    elevation: 2, 
+    shadowColor: '#000', 
+    shadowOpacity: 0.05, 
+    shadowRadius: 5 
+  },
+  headerRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 25, 
+    // In-adjust ang padding para magmukhang balance sa safe area
+    paddingVertical: Platform.OS === 'android' ? 20 : 15 
+  },
   greeting: { fontSize: 22, fontWeight: "800", color: "#01579B" },
   subGreeting: { fontSize: 12, color: '#64748B', marginTop: -2 },
   container: { flex: 1 },

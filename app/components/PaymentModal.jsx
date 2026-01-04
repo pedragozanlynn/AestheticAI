@@ -7,15 +7,17 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Dimensions,
 } from "react-native";
 import { db } from "../../config/firebase";
+import { Ionicons } from "@expo/vector-icons";
 
-/* ================= HELPERS ================= */
+const { width } = Dimensions.get("window");
 
 const formatDate = (ts) => {
   if (!ts) return "TBA";
   if (typeof ts?.toDate === "function") {
-    return ts.toDate().toLocaleDateString();
+    return ts.toDate().toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
   }
   return "TBA";
 };
@@ -45,7 +47,6 @@ export default function PaymentModal({
   const [appointmentAt, setAppointmentAt] = useState(null);
   const [fetching, setFetching] = useState(true);
 
-  /* ================= AUTO LOAD APPOINTMENT ================= */
   useEffect(() => {
     if (!visible || !appointmentId) return;
 
@@ -53,9 +54,7 @@ export default function PaymentModal({
       try {
         const snap = await getDoc(doc(db, "appointments", appointmentId));
         if (!snap.exists()) return;
-
         const data = snap.data();
-
         setSessionFee(Number(data.sessionFee || 0));
         setAppointmentAt(data.appointmentAt || null);
       } catch (e) {
@@ -72,20 +71,16 @@ export default function PaymentModal({
   const safeDate = formatDate(appointmentAt);
   const safeTime = formatTime(appointmentAt);
 
-  /* ================= PAYMENT ================= */
   const handlePayment = async () => {
     if (!userId || !consultantId || !appointmentId || !sessionFee) {
       alert("Missing payment information.");
       return;
     }
-
     setLoading(true);
-
     try {
       const consultantShare = Number((sessionFee * 0.7).toFixed(2));
       const adminShare = Number((sessionFee * 0.3).toFixed(2));
 
-      // ✅ CONSULTANT EARNING
       await addDoc(collection(db, "payments"), {
         userId,
         consultantId,
@@ -100,7 +95,6 @@ export default function PaymentModal({
         type: "consultant_earning",
       });
 
-      // ✅ ADMIN INCOME
       await addDoc(collection(db, "subscription_payments"), {
         adminId: "ADMIN_UID",
         userId,
@@ -119,7 +113,6 @@ export default function PaymentModal({
       onPaymentSuccess?.();
       onClose();
     } catch (err) {
-      console.log("Payment error:", err);
       setLoading(false);
       alert("Payment failed. Please try again.");
     }
@@ -129,48 +122,64 @@ export default function PaymentModal({
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.overlay}>
         <View style={styles.card}>
-          <Text style={styles.title}>Consultation Payment</Text>
-
-          <View style={styles.divider} />
+          <View style={styles.iconCircle}>
+            <Ionicons name="card-outline" size={32} color="#01579B" />
+          </View>
+          
+          <Text style={styles.title}>Payment Details</Text>
+          <Text style={styles.subtitle}>Complete payment to start session</Text>
 
           {fetching ? (
-            <ActivityIndicator size="large" color="#2c4f4f" />
+            <View style={styles.loaderWrap}>
+              <ActivityIndicator size="large" color="#01579B" />
+              <Text style={styles.loaderText}>Fetching Invoice...</Text>
+            </View>
           ) : (
             <>
-              <View style={styles.infoRow}>
-                <Text style={styles.label}>Consultant</Text>
-                <Text style={styles.value}>{consultantName}</Text>
+              <View style={styles.invoiceContainer}>
+                <View style={styles.infoRow}>
+                  <Text style={styles.label}>Consultant</Text>
+                  <Text style={styles.value}>{consultantName}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.label}>Schedule</Text>
+                  <Text style={styles.value}>{safeDate}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.label}>Time Slot</Text>
+                  <Text style={styles.value}>{safeTime}</Text>
+                </View>
+                
+                <View style={styles.dashedDivider} />
+                
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalLabel}>Grand Total</Text>
+                  <Text style={styles.totalValue}>₱{sessionFee.toFixed(2)}</Text>
+                </View>
               </View>
 
-              <View style={styles.infoRow}>
-                <Text style={styles.label}>Date</Text>
-                <Text style={styles.value}>{safeDate}</Text>
-              </View>
-
-              <View style={styles.infoRow}>
-                <Text style={styles.label}>Start Time</Text>
-                <Text style={styles.value}>{safeTime}</Text>
-              </View>
-
-              <View style={styles.feeBox}>
-                <Text style={styles.feeLabel}>Session Fee</Text>
-                <Text style={styles.feeValue}>₱{sessionFee}</Text>
+              <View style={styles.securityNote}>
+                <Ionicons name="shield-checkmark" size={14} color="#64748B" />
+                <Text style={styles.securityText}>Secure Transaction via GCash Balance</Text>
               </View>
 
               <TouchableOpacity
-                style={[styles.payBtn, loading && { opacity: 0.7 }]}
+                style={[styles.payBtn, loading && styles.disabledBtn]}
                 onPress={handlePayment}
                 disabled={loading}
               >
                 {loading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.payText}>Pay & Start Chat</Text>
+                  <>
+                    <Text style={styles.payText}>Pay & Start Consultation</Text>
+                    <Ionicons name="arrow-forward" size={18} color="#FFF" style={{marginLeft: 8}} />
+                  </>
                 )}
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={onClose}>
-                <Text style={styles.cancelText}>Cancel</Text>
+              <TouchableOpacity onPress={onClose} style={styles.cancelBtn}>
+                <Text style={styles.cancelText}>Cancel Payment</Text>
               </TouchableOpacity>
             </>
           )}
@@ -180,82 +189,140 @@ export default function PaymentModal({
   );
 }
 
-/* ================= STYLES ================= */
-
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
+    backgroundColor: "rgba(15, 23, 42, 0.75)", // Mas dark na overlay para sa focus
     justifyContent: "center",
     alignItems: "center",
   },
   card: {
-    width: "88%",
+    width: width * 0.85,
     backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 22,
-    elevation: 10,
+    borderRadius: 30,
+    padding: 24,
+    alignItems: "center",
+    elevation: 20,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
+  },
+  iconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#E1F5FE",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
   },
   title: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#0F3E48",
-    textAlign: "center",
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#1E293B",
   },
-  divider: {
-    height: 1,
-    backgroundColor: "#E0E0E0",
-    marginVertical: 16,
+  subtitle: {
+    fontSize: 14,
+    color: "#64748B",
+    marginTop: 4,
+    marginBottom: 24,
+  },
+  invoiceContainer: {
+    width: '100%',
+    backgroundColor: "#F8FAFC",
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
   },
   infoRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 10,
+    marginBottom: 12,
   },
   label: {
-    fontSize: 14,
-    color: "#607D8B",
+    fontSize: 13,
+    color: "#64748B",
     fontWeight: "600",
   },
   value: {
-    fontSize: 14,
-    color: "#0F3E48",
+    fontSize: 13,
+    color: "#1E293B",
     fontWeight: "700",
   },
-  feeBox: {
-    backgroundColor: "#E3F2FD",
-    padding: 14,
-    borderRadius: 14,
-    marginVertical: 18,
+  dashedDivider: {
+    height: 1,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    borderStyle: "dashed",
+    marginVertical: 15,
+    borderRadius: 1,
+  },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
   },
-  feeLabel: {
-    fontSize: 13,
-    color: "#2c4f4f",
-    fontWeight: "600",
-  },
-  feeValue: {
-    fontSize: 22,
+  totalLabel: {
+    fontSize: 15,
     fontWeight: "800",
-    color: "#2c4f4f",
-    marginTop: 4,
+    color: "#1E293B",
+  },
+  totalValue: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#01579B",
+  },
+  securityNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 15,
+    marginBottom: 25,
+    gap: 5,
+  },
+  securityText: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "500",
   },
   payBtn: {
-    backgroundColor: "#2c4f4f",
-    paddingVertical: 14,
-    borderRadius: 14,
+    backgroundColor: "#01579B",
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 16,
     alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: "#01579B",
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  disabledBtn: {
+    opacity: 0.7,
+    backgroundColor: "#94A3B8",
   },
   payText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "800",
   },
-  cancelText: {
-    textAlign: "center",
-    marginTop: 14,
-    color: "#888",
-    fontSize: 14,
-    fontWeight: "600",
+  cancelBtn: {
+    marginTop: 16,
+    padding: 10,
   },
+  cancelText: {
+    color: "#94A3B8",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  loaderWrap: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  loaderText: {
+    marginTop: 10,
+    color: "#64748B",
+    fontSize: 13,
+  }
 });

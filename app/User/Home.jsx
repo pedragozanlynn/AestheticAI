@@ -13,16 +13,15 @@ import {
   Text,
   TouchableOpacity,
   View,
+  StatusBar,
 } from "react-native";
 import { auth, db } from "../../config/firebase";
 import useSubscriptionType from "../../services/useSubscriptionType";
 import BottomNavbar from "../components/BottomNav";
 
 const { width } = Dimensions.get("window");
-const CARD_WIDTH = width * 0.7;
+const CARD_WIDTH = width * 0.75;
 const PROFILE_KEY_PREFIX = "aestheticai:user-profile:";
-
-/* ================= TIP OF THE DAY DATA ================= */
 
 const DESIGN_INSPIRATIONS = [
   { title: "Warm Minimalism", tip: "Use neutral colors with natural wood to create a calm, cozy space." },
@@ -40,7 +39,7 @@ export default function Home() {
   const subType = useSubscriptionType();
 
   const scrollRef = useRef(null);
-  const carouselIndex = useRef(0); // ✅ DOES NOT CAUSE RE-RENDER
+  const carouselIndex = useRef(0);
 
   const carouselImages = [
     require("../../assets/carousel1.jpg"),
@@ -48,11 +47,36 @@ export default function Home() {
     require("../../assets/carousel3.png"),
   ];
 
+<<<<<<< HEAD
   /* ================= TIP OF THE DAY ================= */
+=======
+  const loadProfile = async () => {
+    try {
+      if (!auth.currentUser) return;
+      const uid = auth.currentUser.uid;
+      const snap = await getDoc(doc(db, "users", uid));
+      if (snap.exists()) {
+        const data = snap.data();
+        setProfile(data);
+        await AsyncStorage.setItem(`${PROFILE_KEY_PREFIX}${uid}`, JSON.stringify(data));
+      }
+    } catch (err) {
+      console.log("Profile Load Error:", err);
+    }
+  };
+
+  const fetchRooms = () => {
+    setRooms([
+      { id: "1", name: "Modern Living", image: require("../../assets/livingroom.jpg") },
+      { id: "2", name: "Cozy Bedroom", image: require("../../assets/carousel2.jpg") },
+      { id: "3", name: "Sleek Office", image: require("../../assets/carousel3.png") },
+    ]);
+  };
+
+>>>>>>> 796c7f8eb0be508b28f00fbdd43a786c91fd84a9
   const loadTipOfTheDay = async () => {
     const todayKey = `tip-${new Date().toDateString()}`;
     const saved = await AsyncStorage.getItem(todayKey);
-
     if (saved) {
       setTipOfTheDay(JSON.parse(saved));
     } else {
@@ -65,37 +89,39 @@ export default function Home() {
 
   const isPremium = subType === "Premium";
 
-  /* ================= AUTO CAROUSEL (FIX ONLY) ================= */
   useEffect(() => {
     const interval = setInterval(() => {
-      carouselIndex.current =
-        (carouselIndex.current + 1) % carouselImages.length;
-
+      carouselIndex.current = (carouselIndex.current + 1) % carouselImages.length;
       scrollRef.current?.scrollTo({
-        x: carouselIndex.current * (width - 32),
+        x: carouselIndex.current * width,
         animated: true,
       });
-    }, 3500);
-
+    }, 4000);
     return () => clearInterval(interval);
   }, []);
 
+<<<<<<< HEAD
   /* ================= NAVIGATION ================= */
+=======
+  useEffect(() => {
+    loadProfile();
+    fetchRooms();
+    loadTipOfTheDay();
+  }, []);
+
+>>>>>>> 796c7f8eb0be508b28f00fbdd43a786c91fd84a9
   const goToConsultations = () => {
     if (!isPremium) {
-      Alert.alert(
-        "Premium Feature",
-        "Consultation is only available for Premium users.",
-        [
-          { text: "Cancel" },
-          { text: "Upgrade Now", onPress: () => router.push("/User/UpgradeInfo") },
-        ]
-      );
+      Alert.alert("Premium Feature", "Consultation is only available for Premium users.", [
+        { text: "Cancel" },
+        { text: "Upgrade Now", onPress: () => router.push("/User/UpgradeInfo") },
+      ]);
       return;
     }
     router.push("/User/Consultations");
   };
 
+<<<<<<< HEAD
   const goToDesignAI = () => router.push("/User/Design");
   const goToCustomize = () => router.push("/User/Customize");
   const goToProjects = () => router.push("/User/Projects");
@@ -154,20 +180,39 @@ export default function Home() {
     return unsubscribe;
   }, []);
 
+=======
+>>>>>>> 796c7f8eb0be508b28f00fbdd43a786c91fd84a9
   return (
     <View style={styles.page}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* ===== HEADER ===== */}
+      <StatusBar barStyle="light-content" />
+      <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+        
+        {/* ===== PREMIUM HEADER ===== */}
         <View style={styles.header}>
-          <Text style={styles.greet}>Welcome back,</Text>
-          <View style={styles.nameRow}>
-            <Text style={styles.name}>{profile?.name}</Text>
-            {isPremium && <Ionicons name="diamond" size={22} color="#FFD700" />}
+          <View style={styles.headerTop}>
+            <View>
+              <Text style={styles.greetText}>Hello,</Text>
+              <View style={styles.nameRow}>
+                <Text style={styles.userName}>{profile?.name || "Guest"}</Text>
+                {isPremium && (
+                  <View style={styles.premiumBadge}>
+                    <Ionicons name="diamond" size={12} color="#FFF" />
+                    <Text style={styles.premiumText}>PRO</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+            <TouchableOpacity style={styles.notifBtn} onPress={() => router.push("/User/Profile")}>
+               <Image 
+                 source={profile?.gender === "Female" ? require("../../assets/office-woman.png") : require("../../assets/office-man.png")} 
+                 style={styles.profileAvatar} 
+               />
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* ===== AUTO CAROUSEL ===== */}
-        <View style={styles.carouselWrap}>
+        {/* ===== HERO CAROUSEL ===== */}
+        <View style={styles.carouselContainer}>
           <ScrollView
             ref={scrollRef}
             horizontal
@@ -175,160 +220,211 @@ export default function Home() {
             showsHorizontalScrollIndicator={false}
           >
             {carouselImages.map((img, i) => (
-              <View key={i} style={styles.carouselCard}>
-                <Image source={img} style={styles.carouselImage} />
+              <View key={i} style={styles.slide}>
+                <Image source={img} style={styles.slideImage} />
+                <View style={styles.slideOverlay} />
               </View>
             ))}
           </ScrollView>
         </View>
 
-        {/* ===== QUICK ACTIONS ===== */}
-        <View style={styles.quickActions}>
-          <Action bg={styles.actionCardTeal} icon={require("../../assets/design.png")} label="Design with AI" onPress={goToDesignAI} />
-          <Action bg={styles.actionCardPink} icon={require("../../assets/customize.png")} label="Customize with AI" onPress={goToCustomize} />
-          <Action bg={styles.actionCardPurple} icon={require("../../assets/consultation.png")} label="Consultation" onPress={goToConsultations} />
+        {/* ===== QUICK ACTIONS (MODERN FLOATING) ===== */}
+        <View style={styles.actionContainer}>
+          <Text style={styles.sectionLabel}>Design Tools</Text>
+          <View style={styles.actionGrid}>
+             <Action 
+               icon="color-wand" 
+               label="AI Design" 
+               desc="From Scratch" 
+               color="#0D9488" 
+               onPress={() => router.push("/User/Design")} 
+             />
+             <Action 
+               icon="brush" 
+               label="Customize" 
+               desc="Edit Room" 
+               color="#DB2777" 
+               onPress={() => router.push("/User/Customize")} 
+             />
+             <Action 
+               icon="chatbubbles" 
+               label="Consult" 
+               desc="Pro Advice" 
+               color="#7C3AED" 
+               onPress={goToConsultations} 
+             />
+          </View>
         </View>
 
-        {/* ===== TIP OF THE DAY ===== */}
+        {/* ===== TIP CARD (ELEVATED) ===== */}
         {tipOfTheDay && (
-          <>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Tip of the Day</Text>
-            </View>
+          <View style={styles.tipWrapper}>
             <View style={styles.tipCard}>
-              <View style={styles.tipHeader}>
-                <Ionicons name="bulb" size={18} color="#8f2f52" />
-                <Text style={styles.tipTitle}>{tipOfTheDay.title}</Text>
+              <View style={styles.tipBadge}>
+                <Ionicons name="bulb" size={16} color="#FFF" />
+                <Text style={styles.tipBadgeText}>TIP OF THE DAY</Text>
               </View>
-              <Text style={styles.tipText}>{tipOfTheDay.tip}</Text>
+              <Text style={styles.tipTitle}>{tipOfTheDay.title}</Text>
+              <Text style={styles.tipContent}>{tipOfTheDay.tip}</Text>
             </View>
-          </>
+          </View>
         )}
 
         {/* ===== RECENT PROJECTS ===== */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Projects</Text>
+        <View style={styles.projectsSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Recent Projects</Text>
+            <TouchableOpacity onPress={() => router.push("/User/Projects")}>
+              <Text style={styles.seeAll}>See All</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.projectList}>
+            {rooms.map((room) => (
+              <TouchableOpacity key={room.id} style={styles.projectCard}>
+                <Image source={room.image} style={styles.projectImg} />
+                <View style={styles.projectInfo}>
+                  <Text style={styles.projectName}>{room.name}</Text>
+                  <Ionicons name="chevron-forward-circle" size={20} color="#01579B" />
+                </View>
+              </TouchableOpacity>
+            ))}
+          
+          </ScrollView>
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.projectsRow}>
-          {rooms.map((room) => (
-            <View key={room.id} style={styles.projectCard}>
-              <Image source={room.image} style={styles.projectImage} />
-              <View style={styles.projectOverlay}>
-                <Ionicons name="sparkles-outline" size={16} color="#FFD700" />
-                <Text style={styles.projectText}>{room.name}</Text>
-              </View>
-            </View>
-          ))}
-
-          <TouchableOpacity style={[styles.projectCard, styles.viewAllCard]} onPress={goToProjects}>
-            <Ionicons name="grid" size={28} color="#2c4f4f" />
-            <Text style={styles.viewAllText}>View All</Text>
-          </TouchableOpacity>
-        </ScrollView>
       </ScrollView>
-
       <BottomNavbar subType={subType} />
     </View>
   );
 }
 
-/* ================= SMALL COMPONENT ================= */
-const Action = ({ bg, icon, label, onPress }) => (
-  <TouchableOpacity style={[styles.actionCard, bg]} onPress={onPress}>
-    <Image source={icon} style={styles.actionIcon} />
-    <Text style={styles.actionText}>{label}</Text>
+const Action = ({ icon, label, desc, color, onPress }) => (
+  <TouchableOpacity style={styles.actionItem} onPress={onPress} activeOpacity={0.7}>
+    <View style={[styles.iconCircle, { backgroundColor: color + "15" }]}>
+      <Ionicons name={icon} size={24} color={color} />
+    </View>
+    <Text style={styles.actionLabel}>{label}</Text>
+    <Text style={styles.actionDesc}>{desc}</Text>
   </TouchableOpacity>
 );
 
-/* ================= STYLES (UNCHANGED) ================= */
-
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#F3F9FA" },
+  page: { flex: 1, backgroundColor: "#F8FAFC" },
+  
   header: {
     backgroundColor: "#01579B",
-    paddingTop: 50,
-    paddingHorizontal: 20,
-    paddingBottom: 70,
-    borderBottomLeftRadius: 10,
-    borderBottomRightRadius: 10,
+    paddingTop: 60,
+    paddingBottom: 80,
+    paddingHorizontal: 25,
   },
-  greet: { color: "#FFF", fontSize: 18 },
-  nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  name: { color: "#FFF", fontSize: 28, fontWeight: "700" },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  greetText: { color: "#E0F2FE", fontSize: 14, fontWeight: "500" },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
+  userName: { color: "#FFF", fontSize: 24, fontWeight: "900" },
+  premiumBadge: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#CA8A04', 
+    paddingHorizontal: 8, 
+    paddingVertical: 3, 
+    borderRadius: 8,
+    gap: 4
+  },
+  premiumText: { color: '#FFF', fontSize: 10, fontWeight: '900' },
+  profileAvatar: { width: 45, height: 45, borderRadius: 22, borderWidth: 2, borderColor: '#FFF' },
 
-  carouselWrap: { height: 200, marginTop: -60 },
-  carouselCard: {
-    width: width - 32,
-    marginHorizontal: 16,
-    borderRadius: 10,
-    overflow: "hidden",
-  },
-  carouselImage: { width: "100%", height: "100%" },
+  carouselContainer: { marginTop: -60, marginBottom: 25 },
+  slide: { width: width },
+  slideImage: { width: width - 40, height: 180, borderRadius: 24, alignSelf: 'center' },
+  slideOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: 24, width: width - 40, alignSelf: 'center' },
 
-  quickActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginHorizontal: 10,
-    marginTop: -40,
-    marginBottom: 20,
-  },
-  actionCard: {
-    flex: 1,
-    margin: 6,
-    height: 110,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  actionCardTeal: { backgroundColor: "#e0f7fa" },
-  actionCardPink: { backgroundColor: "#fce4ec" },
-  actionCardPurple: { backgroundColor: "#ede7f6" },
-  actionIcon: { width: 36, height: 36, marginBottom: 6 },
-  actionText: { fontWeight: "900", fontSize: 11 },
-
-  sectionHeader: { marginHorizontal: 16, marginBottom: 10 },
-  sectionTitle: { fontSize: 15, fontWeight: "800", color: "#2c4f4f", marginTop: -10, },
-  tipCard: {
-    backgroundColor: "#FFFFFF",
-    marginHorizontal: 16,
-    padding: 30,
-    borderRadius: 14,
-    marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: "#8f2f52",
+  actionContainer: { paddingHorizontal: 25, marginBottom: 30 },
+  sectionLabel: { fontSize: 12, fontWeight: "800", color: "#94A3B8", textTransform: 'uppercase', marginBottom: 15, letterSpacing: 1 },
+  actionGrid: { flexDirection: 'row', justifyContent: 'space-between' },
+  actionItem: { 
+    backgroundColor: '#FFF', 
+    width: (width - 70) / 3, 
+    padding: 15, 
+    borderRadius: 20, 
+    alignItems: 'center',
     elevation: 2,
-    marginLeft: 20,
-    marginRight: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 10
+  },
+  iconCircle: { width: 45, height: 45, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+  actionLabel: { fontSize: 11, fontWeight: "800", color: "#1E293B" },
+  actionDesc: { fontSize: 9, color: "#64748B", marginTop: 2 },
 
+  tipWrapper: { paddingHorizontal: 25, marginBottom: 30 },
+  tipCard: { 
+    backgroundColor: "#FFF", 
+    padding: 20, 
+    borderRadius: 24, 
+    borderLeftWidth: 6, 
+    borderLeftColor: "#01579B",
+    elevation: 3,
+    shadowColor: '#01579B',
+    shadowOpacity: 0.1,
+    shadowRadius: 15
   },
-  tipHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
-  tipTitle: { fontSize: 15, fontWeight: "800", color: "#8f2f52" },
-  tipText: { fontSize: 13, color: "#444", lineHeight: 18 },
+  tipBadge: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#01579B', 
+    alignSelf: 'flex-start', 
+    paddingHorizontal: 10, 
+    paddingVertical: 4, 
+    borderRadius: 8, 
+    gap: 6, 
+    marginBottom: 12 
+  },
+  tipBadgeText: { color: '#FFF', fontSize: 9, fontWeight: '900' },
+  tipTitle: { fontSize: 16, fontWeight: "800", color: "#0F3E48", marginBottom: 6 },
+  tipContent: { fontSize: 13, color: "#64748B", lineHeight: 20 },
 
-  projectsRow: { paddingLeft: 16, paddingBottom: 80 },
-  projectCard: {
-    width: CARD_WIDTH,
-    height: 180,
-    borderRadius: 18,
-    overflow: "hidden",
-    marginRight: 16,
+  projectsSection: { marginBottom: 100 },
+  sectionHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 25, 
+    marginBottom: 15 
   },
-  projectImage: { width: "100%", height: "100%" },
-  projectOverlay: {
-    position: "absolute",
-    bottom: 0,
-    flexDirection: "row",
-    gap: 6,
-    padding: 10,
-    backgroundColor: "rgba(0,0,0,0.35)",
+  sectionTitle: { fontSize: 18, fontWeight: "900", color: "#0F3E48" },
+  seeAll: { color: "#01579B", fontWeight: "700", fontSize: 13 },
+  projectList: { paddingLeft: 25 },
+  projectCard: { 
+    width: CARD_WIDTH, 
+    backgroundColor: '#FFF', 
+    borderRadius: 24, 
+    marginRight: 15, 
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 10
   },
-  projectText: { color: "#FFF", fontWeight: "700" },
-
-  viewAllCard: {
-    backgroundColor: "#e6f0ee",
-    justifyContent: "center",
-    alignItems: "center",
+  projectImg: { width: '100%', height: 140 },
+  projectInfo: { 
+    padding: 15, 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center' 
   },
-  viewAllText: { marginTop: 6, fontWeight: "800", color: "#2c4f4f" },
+  projectName: { fontWeight: '800', color: '#1E293B' },
+  addProjectCard: {
+    width: 80,
+    height: 140,
+    borderRadius: 24,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    marginRight: 25
+  },
+  addText: { fontSize: 10, fontWeight: '700', color: '#64748B', marginTop: 5 }
 });

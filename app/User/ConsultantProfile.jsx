@@ -1,3 +1,14 @@
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  StatusBar,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -9,20 +20,17 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import React, { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
 import { db } from "../../config/firebase";
 import ScheduleModal from "../components/ScheduleModal";
 
-const ICON_COLOR = "#2c4f4f";
+// UPDATED THEME COLORS
+const THEME = {
+  header: "#01579B",      // Bagong Blue Color
+  icon: "#2c4f4f",        // Dark Icon Color
+  button: "#3fa796",      // Original Green Button
+  bg: "#faf9f6",          // Off-white Background
+  accentBlue: "#B3E5FC"   // Light Blue for Subtitles
+};
 
 export default function ConsultantProfile() {
   const { consultantId } = useLocalSearchParams();
@@ -30,72 +38,55 @@ export default function ConsultantProfile() {
 
   const [consultant, setConsultant] = useState(null);
   const [ratings, setRatings] = useState([]);
-  const [reviewerMap, setReviewerMap] = useState({}); // ✅ ADDED
+  const [reviewerMap, setReviewerMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [ratingsLoading, setRatingsLoading] = useState(true);
   const [scheduleVisible, setScheduleVisible] = useState(false);
 
-  /* ================= FETCH CONSULTANT ================= */
-  useEffect(() => {
-    const fetchConsultant = async () => {
-      try {
-        const snap = await getDoc(doc(db, "consultants", consultantId));
-        if (snap.exists()) {
-          setConsultant({ id: snap.id, ...snap.data() });
-        }
-      } catch (e) {
-        console.log("Consultant fetch error:", e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchConsultant();
-  }, [consultantId]);
-
-  /* ================= FETCH RATINGS (FIXED NAME SOURCE) ================= */
   useEffect(() => {
     if (!consultantId) return;
 
-    const fetchRatings = async () => {
-      setRatingsLoading(true);
+    const fetchData = async () => {
       try {
+        const cSnap = await getDoc(doc(db, "consultants", consultantId));
+        if (cSnap.exists()) {
+          setConsultant({ id: cSnap.id, ...cSnap.data() });
+        }
+
         const q = query(
           collection(db, "ratings"),
           where("consultantId", "==", consultantId),
           orderBy("createdAt", "desc")
         );
+        const rSnap = await getDocs(q);
+        const rList = rSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setRatings(rList);
 
-        const snap = await getDocs(q);
-        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setRatings(list);
-
-        // 🔥 GET USER NAME FROM /users/{userId}
         const map = {};
         await Promise.all(
-          list.map(async (r) => {
+          rList.map(async (r) => {
             if (r.userId && !map[r.userId]) {
               const uSnap = await getDoc(doc(db, "users", r.userId));
-              if (uSnap.exists()) {
-                map[r.userId] = uSnap.data().name || "Anonymous";
-              }
+              if (uSnap.exists()) map[r.userId] = uSnap.data().name;
             }
           })
         );
         setReviewerMap(map);
       } catch (e) {
-        console.log("Ratings fetch error:", e);
+        console.error("Data fetch error:", e);
       } finally {
+        setLoading(false);
         setRatingsLoading(false);
       }
     };
 
-    fetchRatings();
+    fetchData();
   }, [consultantId]);
 
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color={ICON_COLOR} />
+        <ActivityIndicator size="large" color={THEME.header} />
       </View>
     );
   }
@@ -108,114 +99,90 @@ export default function ConsultantProfile() {
     );
   }
 
-  const availability = Array.isArray(consultant.availability)
-    ? consultant.availability
-    : [];
-
-  const avgRating =
-    ratings.length > 0
-      ? (
-          ratings.reduce((sum, r) => sum + (r.rating || 0), 0) /
-          ratings.length
-        ).toFixed(1)
-      : "—";
+  const availability = Array.isArray(consultant.availability) ? consultant.availability : [];
+  const avgRating = ratings.length > 0
+    ? (ratings.reduce((sum, r) => sum + (r.rating || 0), 0) / ratings.length).toFixed(1)
+    : "0.0";
 
   return (
-    <ScrollView style={styles.page}>
-      {/* BACK */}
-      <TouchableOpacity style={styles.backBtn} onPress={router.back}>
-        <Ionicons name="arrow-back" size={26} color="#fff" />
-      </TouchableOpacity>
+    <View style={styles.container}>
+      {/* StatusBar adjusted for the blue header */}
+      <StatusBar barStyle="light-content" backgroundColor={THEME.header} />
+      
+      <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={router.back}>
+            <Ionicons name="chevron-back" size={28} color="#fff" />
+          </TouchableOpacity>
+          
+          <View style={styles.profileInfo}>
+            <Image
+              source={consultant.avatar ? { uri: consultant.avatar } : (consultant.gender === "Female" ? require("../../assets/office-woman.png") : require("../../assets/office-man.png"))}
+              style={styles.avatar}
+            />
+            <Text style={styles.headerTitle}>{consultant.fullName}</Text>
+            <Text style={styles.headerSubtitle}>{consultant.specialization}</Text>
+          </View>
 
-      {/* HEADER */}
-      <View style={styles.header}>
-        <Image
-          source={
-            consultant.avatar
-              ? { uri: consultant.avatar }
-              : consultant.gender === "Female"
-              ? require("../../assets/office-woman.png")
-              : require("../../assets/office-man.png")
-          }
-          style={styles.avatar}
-        />
-
-        <Text style={styles.headerTitle}>{consultant.fullName}</Text>
-        <Text style={styles.headerSubtitle}>{consultant.specialization}</Text>
-
-        <View style={styles.headerStats}>
-          <Stat label="Rating" value={avgRating} />
-          <Stat label="Reviews" value={ratings.length} />
-          <Stat label="Schedules" value={availability.length} />
-        </View>
-      </View>
-
-      <View style={styles.content}>
-        {/* INFORMATION */}
-        <View style={styles.card}>
-          <Text style={styles.section}>Information</Text>
-          <InfoRow icon="person" label="Full Name" value={consultant.fullName} />
-          <InfoRow icon="mail" label="Email" value={consultant.email} />
-          <InfoRow icon="home" label="Address" value={consultant.address} />
-          <InfoRow icon="male-female" label="Gender" value={consultant.gender} />
-          <InfoRow icon="briefcase" label="Type" value={consultant.consultantType} />
-          <InfoRow icon="construct" label="Specialization" value={consultant.specialization} />
-          <InfoRow icon="school" label="Education" value={consultant.education || "Not provided"} />
+          <View style={styles.headerStats}>
+            <Stat label="Rating" value={avgRating} />
+            <Stat label="Reviews" value={ratings.length} />
+            <Stat label="Schedules" value={availability.length} />
+          </View>
         </View>
 
-        {/* AVAILABILITY */}
-        <View style={styles.card}>
-          <Text style={styles.section}>Availability</Text>
-          {availability.length > 0 ? (
-            availability.map((day, i) => (
-              <InfoRow key={i} icon="calendar" label="Day" value={day} />
-            ))
-          ) : (
-            <Text style={styles.value}>Not specified</Text>
-          )}
-        </View>
+        <View style={styles.content}>
+          <View style={styles.card}>
+            <Text style={[styles.sectionTitle, { color: THEME.header, borderLeftColor: THEME.button }]}>Expert Details</Text>
+            <InfoRow icon="briefcase-outline" label="Type" value={consultant.consultantType} />
+            <InfoRow icon="school-outline" label="Education" value={consultant.education || "Not provided"} />
+            <InfoRow icon="people-outline" label="Gender" value={consultant.gender} />
+            <InfoRow icon="mail-outline" label="Email" value={consultant.email} />
+            <InfoRow icon="location-outline" label="Address" value={consultant.address} />
+          </View>
 
-        {/* RATINGS */}
-        <View style={styles.card}>
-          <Text style={styles.section}>User Feedback</Text>
+          <View style={styles.card}>
+            <Text style={[styles.sectionTitle, { color: THEME.header, borderLeftColor: THEME.button }]}>Working Days</Text>
+            <View style={styles.availabilityGrid}>
+              {availability.length > 0 ? (
+                availability.map((day, i) => (
+                  <View key={i} style={styles.dayChip}><Text style={styles.dayText}>{day}</Text></View>
+                ))
+              ) : (
+                <Text style={styles.muted}>No schedule set</Text>
+              )}
+            </View>
+          </View>
 
-          {ratingsLoading ? (
-            <ActivityIndicator />
-          ) : ratings.length === 0 ? (
-            <Text style={styles.muted}>No ratings yet</Text>
-          ) : (
-            ratings.map((r) => (
-              <View key={r.id} style={styles.review}>
-                <Text style={styles.reviewName}>
-                  {reviewerMap[r.userId] || "Anonymous"}
-                </Text>
-
-                <Text style={styles.reviewDate}>
-                  {r.createdAt?.toDate?.().toDateString()}
-                </Text>
-
-                <View style={styles.stars}>
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <Ionicons
-                      key={i}
-                      name={i <= r.rating ? "star" : "star-outline"}
-                      size={16}
-                      color="#FFD700"
-                    />
-                  ))}
+          <View style={styles.card}>
+            <Text style={[styles.sectionTitle, { color: THEME.header, borderLeftColor: THEME.button }]}>User Feedback</Text>
+            {ratingsLoading ? (
+              <ActivityIndicator color={THEME.header} />
+            ) : ratings.length === 0 ? (
+              <Text style={styles.muted}>No ratings yet</Text>
+            ) : (
+              ratings.map((r) => (
+                <View key={r.id} style={styles.reviewCard}>
+                  <View style={styles.reviewHeader}>
+                    <Text style={styles.reviewName}>{reviewerMap[r.userId] || "Anonymous"}</Text>
+                    <Text style={styles.reviewDate}>{r.createdAt?.toDate?.().toLocaleDateString()}</Text>
+                  </View>
+                  <View style={styles.starsRow}>
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <Ionicons key={i} name={i <= r.rating ? "star" : "star-outline"} size={14} color="#F59E0B" />
+                    ))}
+                  </View>
+                  {!!r.feedback && <Text style={styles.reviewText}>{r.feedback}</Text>}
                 </View>
-
-                {!!r.feedback && (
-                  <Text style={styles.reviewText}>{r.feedback}</Text>
-                )}
-              </View>
-            ))
-          )}
+              ))
+            )}
+          </View>
         </View>
+      </ScrollView>
 
-        {/* ACTION */}
-        <TouchableOpacity style={styles.cta} onPress={() => setScheduleVisible(true)}>
-          <Ionicons name="calendar-outline" size={18} color="#fff" />
+      <View style={styles.bottomCta}>
+        <TouchableOpacity style={styles.ctaButton} onPress={() => setScheduleVisible(true)}>
+          <Ionicons name="calendar-outline" size={20} color="#fff" />
           <Text style={styles.ctaText}>Request Consultation</Text>
         </TouchableOpacity>
       </View>
@@ -226,11 +193,9 @@ export default function ConsultantProfile() {
         consultantId={consultant.id}
         availability={availability}
       />
-    </ScrollView>
+    </View>
   );
 }
-
-/* ================= SMALL COMPONENTS ================= */
 
 const Stat = ({ label, value }) => (
   <View style={styles.statBox}>
@@ -241,79 +206,51 @@ const Stat = ({ label, value }) => (
 
 const InfoRow = ({ icon, label, value }) => (
   <View style={styles.infoRow}>
-    <Ionicons name={icon} size={20} color={ICON_COLOR} style={styles.icon} />
-    <Text style={styles.label}>{label}</Text>
-    <Text style={styles.value}>{value}</Text>
+    <Ionicons name={icon} size={18} color={THEME.header} style={{ width: 28 }} />
+    <View style={{ flex: 1 }}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue}>{value}</Text>
+    </View>
   </View>
 );
 
-/* ================= STYLES ================= */
-
 const styles = StyleSheet.create({
-  page: { backgroundColor: "#fff" },
-  backBtn: { position: "absolute", top: 40, left: 20, zIndex: 10 },
-  header: { backgroundColor: "#C48AA0", paddingTop: 70, paddingBottom: 20, alignItems: "center" },
-  avatar: { width: 100, height: 100, borderRadius: 60, borderWidth: 4, borderColor: "#fff" },
-  headerTitle: { fontSize: 22, fontWeight: "800", color: "#fff" },
-  headerSubtitle: { color: "#f5f5f5", marginBottom: 12 },
-  headerStats: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    width: "100%",
-    paddingHorizontal: 20,
-    marginTop: 14,
-  },
-  
-  statBox: {
+  container: { flex: 1, backgroundColor: THEME.bg },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: THEME.bg },
+  header: {
+    backgroundColor: THEME.header,
+    paddingTop: 65,
+    paddingBottom: 35,
     alignItems: "center",
-    justifyContent: "center",
-  
-    width: 90,              // ✅ same width lahat
-    paddingVertical: 10,
-  
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.7)",
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
   },
-  
-  statValue: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#fff",
-  },
-  
-  statLabel: {
-    fontSize: 12,
-    color: "#f5f5f5",
-    marginTop: 2,
-  },
-  
-  content: {
-    paddingHorizontal: 32,
-    paddingTop: 32,
-    marginTop: -10,
-    backgroundColor: "#faf9f6",
-    borderTopLeftRadius: 60,
-    borderTopRightRadius: 60,
-    paddingBottom: 40,
-  },
-
-  card: { backgroundColor: "#fff", borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: "#E1E8EA" },
-  section: { fontSize: 16, fontWeight: "700", color: "#0F3E48", marginBottom: 12 },
-  infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
-  icon: { marginRight: 8 },
-  label: { fontSize: 14, color: "#666", flex: 1 },
-  value: { fontSize: 14, color: "#4A4A4A", flex: 1, textAlign: "right" },
-
-  muted: { color: "#777", fontStyle: "italic" },
-  review: { backgroundColor: "#F7F7F7", padding: 10, borderRadius: 12, marginBottom: 10 },
-  reviewName: { fontWeight: "700" },
-  reviewDate: { fontSize: 11, color: "#777" },
-  stars: { flexDirection: "row", marginVertical: 4 },
-  reviewText: { color: "#333" },
-
-  cta: { backgroundColor: "#3fa796", padding: 15, borderRadius: 14, flexDirection: "row", justifyContent: "center", gap: 8 },
-  ctaText: { color: "#fff", fontWeight: "700" },
-
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  backBtn: { position: "absolute", top: 45, left: 15, padding: 5 },
+  profileInfo: { alignItems: 'center' },
+  avatar: { width: 110, height: 110, borderRadius: 30, borderWidth: 4, borderColor: "rgba(255,255,255,0.3)" },
+  headerTitle: { fontSize: 24, fontWeight: "900", color: "#fff", marginTop: 12 },
+  headerSubtitle: { color: THEME.accentBlue, fontSize: 15, fontWeight: "500" },
+  headerStats: { flexDirection: "row", justifyContent: "space-around", width: "100%", marginTop: 25, paddingHorizontal: 20 },
+  statBox: { alignItems: "center", width: 95, paddingVertical: 12, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.12)", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
+  statValue: { fontSize: 18, fontWeight: "800", color: "#fff" },
+  statLabel: { fontSize: 11, color: "#fff", opacity: 0.8, marginTop: 2 },
+  content: { paddingHorizontal: 20, paddingTop: 25, paddingBottom: 130 },
+  card: { backgroundColor: "#fff", borderRadius: 25, padding: 22, marginBottom: 20, elevation: 3, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 15 },
+  sectionTitle: { fontSize: 18, fontWeight: "800", marginBottom: 18, borderLeftWidth: 5, paddingLeft: 12 },
+  infoRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 18 },
+  infoLabel: { fontSize: 12, color: "#94A3B8", fontWeight: "700", textTransform: 'uppercase', letterSpacing: 0.5 },
+  infoValue: { fontSize: 14, color: "#1E293B", fontWeight: "600", marginTop: 2 },
+  availabilityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  dayChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: "#E0F2F1", borderWidth: 1, borderColor: "#B2DFDB" },
+  dayText: { fontSize: 13, fontWeight: "700", color: "#00796B" },
+  reviewCard: { backgroundColor: "#F8FAFC", padding: 15, borderRadius: 18, marginBottom: 12, borderWidth: 1, borderColor: "#F1F5F9" },
+  reviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  reviewName: { fontWeight: "800", fontSize: 14, color: "#1E293B" },
+  reviewDate: { fontSize: 11, color: "#94A3B8" },
+  starsRow: { flexDirection: 'row', marginVertical: 6 },
+  reviewText: { fontSize: 13, color: "#475569", lineHeight: 19 },
+  muted: { color: "#94A3B8", fontStyle: "italic", textAlign: 'center', width: '100%' },
+  bottomCta: { position: 'absolute', bottom: 0, width: '100%', padding: 20, paddingBottom: 35, backgroundColor: 'rgba(250, 249, 246, 0.98)' },
+  ctaButton: { backgroundColor: THEME.button, height: 60, borderRadius: 20, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 12, elevation: 5 },
+  ctaText: { color: "#fff", fontWeight: "800", fontSize: 16, letterSpacing: 0.5 },
 });

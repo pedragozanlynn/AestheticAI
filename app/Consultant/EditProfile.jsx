@@ -6,6 +6,10 @@ import {
   ScrollView,
   Alert,
   TouchableOpacity,
+  StatusBar,
+  SafeAreaView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
@@ -25,14 +29,13 @@ export default function EditProfile() {
     fullName: "",
     address: "",
     gender: "",
-    consultantType: "", // 🔒 used only for condition
+    consultantType: "",
     education: "",
     specialization: "",
     experience: "",
     licenseNumber: "",
   });
 
-  /* ================= LOAD CONSULTANT DATA ================= */
   useEffect(() => {
     const loadProfile = async () => {
       try {
@@ -57,7 +60,6 @@ export default function EditProfile() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  /* ================= SAVE PROFILE ================= */
   const handleSave = async () => {
     if (
       !formData.fullName ||
@@ -66,10 +68,7 @@ export default function EditProfile() {
       !formData.education ||
       !formData.specialization
     ) {
-      return Alert.alert(
-        "Missing Field",
-        "Please complete all required fields."
-      );
+      return Alert.alert("Missing Field", "Please complete all required fields.");
     }
 
     try {
@@ -82,14 +81,8 @@ export default function EditProfile() {
         gender: formData.gender,
         education: formData.education,
         specialization: formData.specialization,
-        experience:
-          formData.consultantType === "Professional"
-            ? formData.experience || ""
-            : "",
-        licenseNumber:
-          formData.consultantType === "Professional"
-            ? formData.licenseNumber || ""
-            : "",
+        experience: formData.consultantType === "Professional" ? formData.experience || "" : "",
+        licenseNumber: formData.consultantType === "Professional" ? formData.licenseNumber || "" : "",
       });
 
       Alert.alert("Success", "Profile updated successfully.");
@@ -101,231 +94,208 @@ export default function EditProfile() {
     }
   };
 
-  /* ================= UI ================= */
   return (
     <View style={styles.container}>
-      {/* HEADER (Change Password style) */}
-      <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.backButton} onPress={router.back}>
-          <Ionicons name="arrow-back" size={22} color="#0F3E48" />
-        </TouchableOpacity>
-
-        <View>
-          <Text style={styles.headerTitle}>Edit Profile</Text>
-          <Text style={styles.headerSubtitle}>
-            Update your consultant information
-          </Text>
+      {/* StatusBar configuration para laging kita ang icons sa taas */}
+      <StatusBar barStyle="dark-content" backgroundColor="#FFF" translucent={false} />
+      
+      {/* SafeAreaView para sa iOS notch at top system spacing */}
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity style={styles.backButton} onPress={router.back}>
+            <Ionicons name="arrow-back" size={24} color="#1E293B" />
+          </TouchableOpacity>
+          <View>
+            <Text style={styles.headerTitle}>Edit Profile</Text>
+            <Text style={styles.headerSubtitle}>Professional Information</Text>
+          </View>
         </View>
-      </View>
+      </SafeAreaView>
 
-      <View style={styles.divider} />
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Basic Details</Text>
+          </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <Input
-            value={formData.fullName}
-            onChangeText={(t) => handleChange("fullName", t)}
-            placeholder="Full Name"
-          />
+          <View style={styles.card}>
+            <Input
+              label="Full Name"
+              value={formData.fullName}
+              onChangeText={(t) => handleChange("fullName", t)}
+              placeholder="Enter your full name"
+            />
 
-          <Input
-            value={formData.address}
-            onChangeText={(t) => handleChange("address", t)}
-            placeholder="Address"
-          />
+            <Input
+              label="Office/Clinic Address"
+              value={formData.address}
+              onChangeText={(t) => handleChange("address", t)}
+              placeholder="City, Province"
+            />
 
-          {/* GENDER */}
-          <Text style={styles.label}>Gender</Text>
-          <View style={styles.genderRow}>
-            {["Male", "Female"].map((g) => (
-              <TouchableOpacity
-                key={g}
-                style={[
-                  styles.genderBtn,
-                  formData.gender === g &&
-                    (g === "Male"
-                      ? styles.genderMaleActive
-                      : styles.genderFemaleActive),
-                ]}
-                onPress={() => handleChange("gender", g)}
-              >
-                <Ionicons
-                  name={g === "Male" ? "male" : "female"}
-                  size={18}
-                  color={formData.gender === g ? "#fff" : "#555"}
-                />
-                <Text
+            <Text style={styles.label}>Gender</Text>
+            <View style={styles.genderRow}>
+              {["Male", "Female"].map((g) => (
+                <TouchableOpacity
+                  key={g}
                   style={[
-                    styles.genderText,
-                    formData.gender === g && { color: "#fff" },
+                    styles.genderBtn,
+                    formData.gender === g && (g === "Male" ? styles.genderMaleActive : styles.genderFemaleActive),
                   ]}
+                  onPress={() => handleChange("gender", g)}
                 >
-                  {g}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Ionicons
+                    name={g === "Male" ? "male" : "female"}
+                    size={18}
+                    color={formData.gender === g ? "#fff" : "#64748B"}
+                  />
+                  <Text style={[styles.genderText, formData.gender === g && { color: "#fff" }]}>
+                    {g}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
-          {/* EDUCATION */}
-          <View style={styles.pickerBox}>
-            <Picker
-              selectedValue={formData.education}
-              onValueChange={(v) => handleChange("education", v)}
-            >
-              <Picker.Item label="Select degree" value="" />
-              <Picker.Item
-                label="Bachelor of Science in Architecture"
-                value="BS Architecture"
-              />
-              <Picker.Item
-                label="Bachelor of Science in Civil Engineering"
-                value="BSCE"
-              />
-              <Picker.Item
-                label="Bachelor of Interior Design"
-                value="Interior Design"
-              />
-            </Picker>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Credentials</Text>
           </View>
 
-          {/* SPECIALIZATION */}
-          <View style={styles.pickerBox}>
-            <Picker
-              selectedValue={formData.specialization}
-              onValueChange={(v) => handleChange("specialization", v)}
-            >
-              <Picker.Item label="Select specialization" value="" />
-              <Picker.Item
-                label="Architectural Design"
-                value="Architectural Design"
-              />
-              <Picker.Item
-                label="Structural Engineering"
-                value="Structural Engineering"
-              />
-              <Picker.Item
-                label="Residential Interior Design"
-                value="Residential Interior Design"
-              />
-              <Picker.Item
-                label="Lighting Design"
-                value="Lighting Design"
-              />
-            </Picker>
+          <View style={styles.card}>
+            <Text style={styles.label}>Highest Education</Text>
+            <View style={styles.pickerBox}>
+              <Picker
+                selectedValue={formData.education}
+                onValueChange={(v) => handleChange("education", v)}
+                style={styles.picker}
+              >
+                <Picker.Item label="Select degree" value="" color="#94A3B8" />
+                <Picker.Item label="BS in Architecture" value="BS Architecture" />
+                <Picker.Item label="BS in Civil Engineering" value="BSCE" />
+                <Picker.Item label="Bachelor of Interior Design" value="Interior Design" />
+              </Picker>
+            </View>
+
+            <Text style={styles.label}>Primary Specialization</Text>
+            <View style={styles.pickerBox}>
+              <Picker
+                selectedValue={formData.specialization}
+                onValueChange={(v) => handleChange("specialization", v)}
+                style={styles.picker}
+              >
+                <Picker.Item label="Select specialization" value="" color="#94A3B8" />
+                <Picker.Item label="Architectural Design" value="Architectural Design" />
+                <Picker.Item label="Structural Engineering" value="Structural Engineering" />
+                <Picker.Item label="Residential Interior Design" value="Residential Interior Design" />
+                <Picker.Item label="Lighting Design" value="Lighting Design" />
+              </Picker>
+            </View>
+
+            {formData.consultantType === "Professional" && (
+              <View style={styles.proSection}>
+                <View style={styles.proDivider} />
+                <Input
+                  label="Years of Experience"
+                  keyboardType="numeric"
+                  value={formData.experience}
+                  onChangeText={(v) => handleChange("experience", v)}
+                  placeholder="e.g. 5"
+                />
+                <Input
+                  label="PRC License Number"
+                  value={formData.licenseNumber}
+                  onChangeText={(v) => handleChange("licenseNumber", v)}
+                  placeholder="0000000"
+                />
+              </View>
+            )}
           </View>
 
-          {/* PROFESSIONAL ONLY */}
-          {formData.consultantType === "Professional" && (
-            <>
-              <Input
-                label="Experience (Years)"
-                keyboardType="numeric"
-                value={formData.experience}
-                onChangeText={(v) => handleChange("experience", v)}
-              />
-              <Input
-                label="License Number"
-                value={formData.licenseNumber}
-                onChangeText={(v) => handleChange("licenseNumber", v)}
-              />
-            </>
-          )}
-        </View>
-
-        <Button
-          title={loading ? "Saving..." : "Save Changes"}
-          onPress={handleSave}
-          disabled={loading}
-          style={styles.saveBtn}
-        />
-      </ScrollView>
+          <View style={styles.buttonContainer}>
+            <Button
+              title={loading ? "Updating Profile..." : "Save Profile Changes"}
+              onPress={handleSave}
+              disabled={loading}
+              backgroundColor="#01579B"
+            />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
-/* ================= STYLES ================= */
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F3F9FA",
-    padding: 16,
-  },
-
+  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  safeArea: { backgroundColor: "#FFF" },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 30,
-    paddingBottom: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 15, // Binawasan mula 30 para sakto lang ang laki
+    backgroundColor: "#FFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
   },
   backButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#E3F2FD",
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#F1F5F9",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 16,
+    marginRight: 15,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F3E48",
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: "#777",
-    marginTop: 2,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "#E4E6EB",
-    marginBottom: 16,
-  },
+  headerTitle: { fontSize: 18, fontWeight: "900", color: "#1E293B" },
+  headerSubtitle: { fontSize: 13, color: "#64748B", marginTop: 1 },
+
+  scrollContent: { padding: 20, paddingBottom: 40 },
+  sectionHeader: { marginBottom: 10, marginTop: 10, paddingLeft: 5 },
+  sectionTitle: { fontSize: 14, fontWeight: "800", color: "#01579B", textTransform: 'uppercase', letterSpacing: 0.5 },
 
   card: {
     backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: "#E1E8EA",
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 20,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
 
-  label: {
-    fontWeight: "600",
-    marginBottom: 6,
-    color: "#2c4f4f",
-  },
-
-  genderRow: { flexDirection: "row", gap: 12, marginBottom: 14 },
+  label: { fontSize: 13, fontWeight: "700", color: "#475569", marginBottom: 8, marginTop: 10, marginLeft: 2 },
+  genderRow: { flexDirection: "row", gap: 12, marginTop: 5 },
   genderBtn: {
     flex: 1,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 14,
-    borderRadius: 14,
+    paddingVertical: 15,
+    borderRadius: 15,
+    backgroundColor: "#F8FAFC",
     borderWidth: 1,
-    borderColor: "#dce3ea",
-    backgroundColor: "#fff",
+    borderColor: "#E2E8F0",
   },
-  genderMaleActive: {
-    backgroundColor: "#2c4f4f",
-    borderColor: "#2c4f4f",
-  },
-  genderFemaleActive: {
-    backgroundColor: "#8f2f52",
-    borderColor: "#8f2f52",
-  },
-  genderText: { marginLeft: 8, fontWeight: "700", color: "#555" },
+  genderMaleActive: { backgroundColor: "#01579B", borderColor: "#01579B" },
+  genderFemaleActive: { backgroundColor: "#C44569", borderColor: "#C44569" },
+  genderText: { marginLeft: 8, fontWeight: "800", color: "#64748B", fontSize: 14 },
 
   pickerBox: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 15,
     borderWidth: 1,
-    borderColor: "#dce3ea",
-    borderRadius: 14,
-    backgroundColor: "#fff",
-    marginBottom: 14,
+    borderColor: "#E2E8F0",
+    marginBottom: 10,
+    overflow: "hidden",
   },
-
-  saveBtn: { marginTop: 20 },
+  picker: { height: 55, width: "100%" },
+  
+  proSection: { marginTop: 10 },
+  proDivider: { height: 1, backgroundColor: "#F1F5F9", marginVertical: 15 },
+  buttonContainer: { marginTop: 10, marginBottom: 30 },
 });

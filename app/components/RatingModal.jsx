@@ -7,7 +7,21 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
+  Platform,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+
+/* ---------------- CONSTANTS ---------------- */
+const THEME = {
+  primary: "#01579B", // Ang iyong consistent Deep Blue
+  surface: "#FFFFFF",
+  textDark: "#0F172A",
+  textGray: "#64748B",
+  starActive: "#FFD166",
+  starInactive: "#E2E8F0",
+  inputBg: "#F8FAFC",
+  overlay: "rgba(15, 23, 42, 0.7)",
+};
 
 export default function RatingModal({
   visible,
@@ -52,170 +66,197 @@ export default function RatingModal({
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.overlay}>
         <View style={styles.card}>
+          {/* HEADER SECTION */}
+          <View style={styles.iconContainer}>
+            <View style={styles.iconCircle}>
+              <Ionicons name="star" size={30} color={THEME.starActive} />
+            </View>
+          </View>
+
           <Text style={styles.title}>How was your consultation?</Text>
           <Text style={styles.subtitle}>
-            Your feedback helps us improve ✨
+            Your feedback helps us provide better service for you ✨
           </Text>
 
-          {/* ⭐ STARS */}
-          <View style={styles.stars}>
+          {/* ⭐ STAR RATING */}
+          <View style={styles.starsRow}>
             {[1, 2, 3, 4, 5].map((num) => (
               <TouchableOpacity
                 key={num}
                 disabled={loading}
-                activeOpacity={0.7}
+                activeOpacity={0.6}
                 onPress={() => setRating(num)}
+                style={styles.starTouch}
               >
-                <Text
-                  style={[
-                    styles.star,
-                    rating >= num && styles.starActive,
-                    loading && { opacity: 0.4 },
-                  ]}
-                >
-                  ★
-                </Text>
+                <Ionicons
+                  name={rating >= num ? "star" : "star-outline"}
+                  size={42}
+                  color={rating >= num ? THEME.starActive : THEME.starInactive}
+                />
               </TouchableOpacity>
             ))}
           </View>
 
-          {/* 📝 FEEDBACK */}
-          <TextInput
-            style={styles.input}
-            placeholder="Write something nice… (optional)"
-            placeholderTextColor="#9AA6AC"
-            value={feedback}
-            onChangeText={setFeedback}
-            multiline
-            maxLength={300}
-            editable={!loading}
-          />
+          {/* 📝 FEEDBACK INPUT */}
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.input}
+              placeholder="Share your experience (optional)..."
+              placeholderTextColor={THEME.textGray}
+              value={feedback}
+              onChangeText={setFeedback}
+              multiline
+              maxLength={300}
+              editable={!loading}
+            />
+            <Text style={styles.counter}>{feedback.length}/300</Text>
+          </View>
 
-          <Text style={styles.counter}>{feedback.length}/300</Text>
-
-          {/* SUBMIT */}
-          <TouchableOpacity
-            style={[
-              styles.submitBtn,
-              (loading || rating === 0) && { opacity: 0.5 },
-            ]}
-            disabled={loading || rating === 0}
-            onPress={handleSubmit}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.submitText}>Submit Rating</Text>
-            )}
-          </TouchableOpacity>
-
-          {!loading && (
-            <TouchableOpacity onPress={onClose} style={styles.cancelBtn}>
-              <Text style={styles.cancelText}>Maybe later</Text>
+          {/* ACTIONS */}
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={[
+                styles.submitBtn,
+                (loading || rating === 0) && styles.disabledBtn,
+              ]}
+              disabled={loading || rating === 0}
+              onPress={handleSubmit}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.submitText}>Submit Feedback</Text>
+              )}
             </TouchableOpacity>
-          )}
+
+            {!loading && (
+              <TouchableOpacity onPress={onClose} style={styles.cancelBtn}>
+                <Text style={styles.cancelText}>Maybe later</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
     </Modal>
   );
 }
 
-/* ================= AESTHETIC STYLES ================= */
-
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(15,62,72,0.75)",
+    backgroundColor: THEME.overlay,
     justifyContent: "center",
     alignItems: "center",
+    padding: 20,
   },
-
   card: {
-    width: "88%",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 22,
-    padding: 22,
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 8,
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: THEME.surface,
+    borderRadius: 30,
+    padding: 24,
+    alignItems: "center",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
   },
-
+  iconContainer: {
+    marginTop: -60, // Para mag-overlap ang icon sa taas ng card
+    marginBottom: 15,
+  },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: THEME.surface,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 6,
+    borderColor: THEME.overlay.replace('0.7', '1'), // Tugma sa background overlay
+    elevation: 4,
+  },
   title: {
-    fontSize: 20,
-    fontWeight: "800",
+    fontSize: 22,
+    fontWeight: "900",
     textAlign: "center",
-    color: "#0F3E48",
+    color: THEME.textDark,
+    marginBottom: 8,
   },
-
   subtitle: {
-    fontSize: 13,
-    color: "#6B7C85",
+    fontSize: 14,
+    color: THEME.textGray,
     textAlign: "center",
-    marginTop: 6,
-    marginBottom: 18,
+    lineHeight: 20,
+    marginBottom: 24,
+    paddingHorizontal: 10,
   },
-
-  stars: {
+  starsRow: {
     flexDirection: "row",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: 24,
   },
-
-  star: {
-    fontSize: 38,
-    color: "#D0D6DA",
-    marginHorizontal: 6,
+  starTouch: {
+    paddingHorizontal: 4,
   },
-
-  starActive: {
-    color: "#FFD166",
-    textShadowColor: "rgba(0,0,0,0.15)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+  inputWrapper: {
+    width: "100%",
+    marginBottom: 20,
   },
-
   input: {
-    borderWidth: 1,
-    borderColor: "#E1E7EA",
-    borderRadius: 14,
-    padding: 14,
-    minHeight: 80,
-    backgroundColor: "#FAFCFD",
-    color: "#333",
+    width: "100%",
+    backgroundColor: THEME.inputBg,
+    borderRadius: 18,
+    padding: 16,
+    minHeight: 110,
+    color: THEME.textDark,
+    fontSize: 15,
     textAlignVertical: "top",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
-
   counter: {
     fontSize: 11,
-    color: "#8FA1AA",
+    color: THEME.textGray,
     textAlign: "right",
     marginTop: 6,
+    fontWeight: "600",
   },
-
+  buttonContainer: {
+    width: "100%",
+  },
   submitBtn: {
-    marginTop: 18,
-    backgroundColor: "#0F3E48",
-    paddingVertical: 14,
-    borderRadius: 14,
+    width: "100%",
+    backgroundColor: THEME.primary,
+    paddingVertical: 16,
+    borderRadius: 16,
     alignItems: "center",
+    marginBottom: 12,
+    elevation: 4,
   },
-
+  disabledBtn: {
+    backgroundColor: "#CBD5E1",
+    elevation: 0,
+  },
   submitText: {
-    color: "#fff",
+    color: "#FFF",
     fontWeight: "800",
-    fontSize: 15,
-    letterSpacing: 0.3,
+    fontSize: 16,
   },
-
   cancelBtn: {
-    marginTop: 12,
     paddingVertical: 10,
   },
-
   cancelText: {
     textAlign: "center",
-    color: "#7A8A92",
-    fontWeight: "600",
+    color: THEME.textGray,
+    fontWeight: "700",
+    fontSize: 14,
   },
 });

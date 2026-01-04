@@ -10,6 +10,9 @@ import {
   Text,
   TouchableOpacity,
   View,
+  StatusBar,
+  SafeAreaView,
+  Platform
 } from "react-native";
 import useSubscriptionType from "../../services/useSubscriptionType";
 import BottomNavbar from "../components/BottomNav";
@@ -19,7 +22,7 @@ export default function Project() {
   const subType = useSubscriptionType();
   const [projects, setProjects] = useState([]);
 
-  /* ================= LOAD PROJECTS (NO UI SHIFT) ================= */
+  /* ================= LOAD PROJECTS ================= */
   const loadProjects = async () => {
     try {
       const keys = await AsyncStorage.getAllKeys();
@@ -79,7 +82,7 @@ export default function Project() {
           onPress: async () => {
             try {
               await AsyncStorage.removeItem(projectId);
-              loadProjects(); // refresh safely
+              loadProjects();
             } catch (e) {
               console.log("Delete error:", e);
             }
@@ -90,29 +93,25 @@ export default function Project() {
   };
 
   return (
-    <View style={styles.container}>
-      {/* ===== HEADER (FIXED HEIGHT – STABLE UI) ===== */}
-      <View style={styles.projectHeaderRow}>
-        <View style={styles.projectHeaderLeft}>
-          <View style={styles.headerAvatar}>
-            <Ionicons name="albums" size={20} color="#0F3E48" />
-          </View>
-          <View>
-            <Text style={styles.projectTitle}>Saved Projects</Text>
-            <Text style={styles.projectSubtitle}>
-              {projects.length} project(s)
-            </Text>
-          </View>
-        </View>
+    <View style={styles.page}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
+
+      {/* 🟦 HEADER (Kinuha sa AIDesigner) */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>AI Design Gallery</Text>
+        <Text style={styles.headerSubtitle}>
+          Review and manage your saved creations
+        </Text>
       </View>
 
-      <View style={styles.headerDivider} />
-
-      {/* ===== PROJECT LIST ===== */}
+      {/* 🖼️ PROJECT GRID */}
       <ScrollView
-        contentContainerStyle={styles.gallery}
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        <Text style={styles.sectionLabel}>Your Projects ({projects.length})</Text>
+
         {projects.length > 0 ? (
           <View style={styles.grid}>
             {projects.map((project) => (
@@ -129,17 +128,20 @@ export default function Project() {
                       ? { uri: project.image }
                       : project.image
                   }
-                  style={styles.image}
+                  style={styles.cardImage}
                   resizeMode="cover"
                 />
 
-                <View style={styles.overlay}>
-                  <Text style={styles.title} numberOfLines={1}>
+                <View style={styles.cardInfo}>
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{project.tag}</Text>
+                  </View>
+                  <Text style={styles.projectTitle} numberOfLines={1}>
                     {project.title}
                   </Text>
-                  <Text style={styles.date}>{project.date}</Text>
-                  <View style={styles.chip}>
-                    <Text style={styles.chipText}>{project.tag}</Text>
+                  <View style={styles.dateRow}>
+                    <Ionicons name="calendar-outline" size={12} color="#94A3B8" />
+                    <Text style={styles.projectDate}>{project.date}</Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -148,7 +150,7 @@ export default function Project() {
         ) : (
           <View style={styles.emptyWrap}>
             <View style={styles.emptyIconCircle}>
-              <Ionicons name="image-outline" style={styles.emptyIcon} />
+              <Ionicons name="image-outline" size={50} color="#0F3E48" />
             </View>
             <Text style={styles.emptyText}>No AI projects yet</Text>
           </View>
@@ -160,121 +162,101 @@ export default function Project() {
   );
 }
 
-/* ================= STYLES ================= */
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F3F9FA",
+  page: { 
+    flex: 1, 
+    backgroundColor: "#F8FAFC" // Consistent Background
   },
 
-  /* ===== HEADER ===== */
-  projectHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingTop: 30,
+  /* ===== HEADER (EXACTLY FROM AIDESIGNER) ===== */
+  header: {
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingHorizontal: 25,
     paddingBottom: 20,
-    paddingHorizontal: 16,
+    backgroundColor: "#FFF", // White Header
+  },
+  headerTitle: { 
+    fontSize: 26, 
+    fontWeight: "900", 
+    color: "#0F3E48" 
+  },
+  headerSubtitle: { 
+    fontSize: 14, 
+    color: "#64748B", 
+    marginTop: 4 
   },
 
-  projectHeaderLeft: {
-    flexDirection: "row",
-    alignItems: "center",
+  /* ===== CONTENT ===== */
+  container: { flex: 1 },
+  scrollContent: { 
+    paddingHorizontal: 25, 
+    paddingBottom: 120 
   },
 
-  headerAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#E3F2FD",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 10,
+  sectionLabel: { 
+    fontSize: 12, 
+    fontWeight: "800", 
+    color: "#94A3B8", 
+    textTransform: "uppercase", 
+    letterSpacing: 1,
+    marginTop: 25,
+    marginBottom: 15
   },
 
-  projectTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F3E48",
-  },
-
-  projectSubtitle: {
-    fontSize: 12,
-    color: "#777",
-  },
-
-  headerDivider: {
-    height: 1,
-    backgroundColor: "#E4E6EB",
-    marginBottom: 10,
-  },
-
-  /* ===== GRID ===== */
-  gallery: {
-    paddingHorizontal: 20,
-    paddingBottom: 120,
-  },
-
+  /* ===== GRID & CARDS ===== */
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
   },
-
   card: {
     width: "48%",
-    borderRadius: 22,
-    overflow: "hidden",
-    marginBottom: 24,
     backgroundColor: "#FFF",
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
+    borderRadius: 24,
+    marginBottom: 20,
+    overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#f1f1f1",
+    borderColor: "#E2E8F0",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
   },
-
-  image: {
+  cardImage: {
     width: "100%",
-    height: 170,
+    height: 150,
   },
-
-  overlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    backgroundColor: "rgba(0,0,0,0.45)",
+  cardInfo: {
+    padding: 12,
   },
-
-  title: {
-    color: "#FFF",
-    fontSize: 16,
+  badge: {
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 6,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#0F3E48",
+    textTransform: 'uppercase',
+  },
+  projectTitle: {
+    fontSize: 15,
     fontWeight: "700",
+    color: "#1E293B",
   },
-
-  date: {
-    color: "#E1F5FE",
-    fontSize: 12,
-    marginTop: 2,
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
   },
-
-  chip: {
-    marginTop: 8,
-    alignSelf: "flex-start",
-    backgroundColor: "#FDE2E4",
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 16,
-  },
-
-  chipText: {
-    fontSize: 12,
-    color: "#C44569",
-    fontWeight: "600",
+  projectDate: {
+    fontSize: 11,
+    color: "#94A3B8",
   },
 
   /* ===== EMPTY STATE ===== */
@@ -282,23 +264,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 80,
   },
-
   emptyIconCircle: {
-    backgroundColor: "#FDE2E4",
+    backgroundColor: "#F1F5F9",
     borderRadius: 60,
-    padding: 20,
+    padding: 25,
     marginBottom: 14,
   },
-
-  emptyIcon: {
-    fontSize: 46,
-    color: "#912f56",
-  },
-
   emptyText: {
     textAlign: "center",
-    color: "#912f56",
-    fontStyle: "italic",
-    fontSize: 17,
+    color: "#64748B",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
