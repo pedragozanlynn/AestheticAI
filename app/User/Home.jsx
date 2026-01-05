@@ -47,33 +47,7 @@ export default function Home() {
     require("../../assets/carousel3.png"),
   ];
 
-<<<<<<< HEAD
   /* ================= TIP OF THE DAY ================= */
-=======
-  const loadProfile = async () => {
-    try {
-      if (!auth.currentUser) return;
-      const uid = auth.currentUser.uid;
-      const snap = await getDoc(doc(db, "users", uid));
-      if (snap.exists()) {
-        const data = snap.data();
-        setProfile(data);
-        await AsyncStorage.setItem(`${PROFILE_KEY_PREFIX}${uid}`, JSON.stringify(data));
-      }
-    } catch (err) {
-      console.log("Profile Load Error:", err);
-    }
-  };
-
-  const fetchRooms = () => {
-    setRooms([
-      { id: "1", name: "Modern Living", image: require("../../assets/livingroom.jpg") },
-      { id: "2", name: "Cozy Bedroom", image: require("../../assets/carousel2.jpg") },
-      { id: "3", name: "Sleek Office", image: require("../../assets/carousel3.png") },
-    ]);
-  };
-
->>>>>>> 796c7f8eb0be508b28f00fbdd43a786c91fd84a9
   const loadTipOfTheDay = async () => {
     const todayKey = `tip-${new Date().toDateString()}`;
     const saved = await AsyncStorage.getItem(todayKey);
@@ -100,16 +74,7 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
-<<<<<<< HEAD
   /* ================= NAVIGATION ================= */
-=======
-  useEffect(() => {
-    loadProfile();
-    fetchRooms();
-    loadTipOfTheDay();
-  }, []);
-
->>>>>>> 796c7f8eb0be508b28f00fbdd43a786c91fd84a9
   const goToConsultations = () => {
     if (!isPremium) {
       Alert.alert("Premium Feature", "Consultation is only available for Premium users.", [
@@ -121,7 +86,6 @@ export default function Home() {
     router.push("/User/Consultations");
   };
 
-<<<<<<< HEAD
   const goToDesignAI = () => router.push("/User/Design");
   const goToCustomize = () => router.push("/User/Customize");
   const goToProjects = () => router.push("/User/Projects");
@@ -180,8 +144,6 @@ export default function Home() {
     return unsubscribe;
   }, []);
 
-=======
->>>>>>> 796c7f8eb0be508b28f00fbdd43a786c91fd84a9
   return (
     <View style={styles.page}>
       <StatusBar barStyle="light-content" />

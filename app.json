@@ -3,36 +3,11 @@
     "extra": {
       "eas": {
         "projectId": "d2eebfbe-0506-416e-98ac-6ced22cf0fb4"
-      }
+      },
+      "forwardingUrl": "https://chubby-women-crash.loca.lt"
     },
-<<<<<<< HEAD
     "android": {
       "package": "com.mcclien.frontend"
-=======
-   "android": {
-  "package": "com.pedragozanlynn.aestheticai",
-  "icon": "./assets/icon.png",
-  "edgeToEdgeEnabled": false,
-  "softwareKeyboardLayoutMode": "resize"
-},
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/icon.png",
-      "backgroundColor": "#F0E7FF"
-    },
-    "plugins": [
-      "expo-router"
-    ],
-    "experiments": {
-      "typedRoutes": true
-    },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "378347b9-d92e-49b4-8e56-824914724190"
-      }
->>>>>>> 796c7f8eb0be508b28f00fbdd43a786c91fd84a9
     }
   }
 }
