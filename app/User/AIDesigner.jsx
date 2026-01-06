@@ -7,26 +7,23 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Image,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import useSubscriptionType from "../../services/useSubscriptionType";
 import BottomNavbar from "../components/BottomNav";
 
 // ✅ API URL (Using your IP)
-const API_URL = "http://192.168.1.8:3000/api/redesign-room";
+const API_URL = "https://eight-horses-laugh.loca.lt/api/redesign-room";
 
 export default function AIDesigner() {
   const router = useRouter();
