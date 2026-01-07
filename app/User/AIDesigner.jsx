@@ -1,10 +1,8 @@
-
 // app/user/AIDesigner.jsx
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -22,16 +20,16 @@ import {
 import useSubscriptionType from "../../services/useSubscriptionType";
 import BottomNavbar from "../components/BottomNav";
 
-// ✅ API URL (Using your IP)
-const API_URL = "https://eight-horses-laugh.loca.lt/api/redesign-room";
+// ✅ API URL - Ensure no trailing slash
+const API_URL = "https://baggiest-sterigmatic-kandi.ngrok-free.dev";
 
 export default function AIDesigner() {
   const router = useRouter();
   const subType = useSubscriptionType();
 
-
   // View State: 'dashboard' or 'design'
   const [view, setView] = useState("dashboard");
+  const [mode, setMode] = useState("design");
 
   // AI State
   const [messages, setMessages] = useState([
@@ -45,7 +43,7 @@ export default function AIDesigner() {
   const [input, setInput] = useState("");
   const [selectedImage, setSelectedImage] = useState(null);
   const [loading, setLoading] = useState(false);
-  const flatListRef = React.useRef(null);
+  const flatListRef = useRef(null);
 
   // Mock chat summaries for history
   const [chatSummaries] = useState({
@@ -58,25 +56,29 @@ export default function AIDesigner() {
     ],
   });
 
-  // ✅ AI FUNCTIONS
+  // ✅ FIXED: AI FUNCTIONS (Pro Implementation)
   const pickImage = async () => {
+    // Fixed deprecated MediaType warning
     const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: (ImagePicker.MediaType || ImagePicker.MediaTypeOptions).Images,
       allowsEditing: true,
-      quality: 1,
+      quality: 0.7, // Optimized for faster upload
     });
 
     if (!res.canceled) {
       const uri = res.assets[0].uri;
       setSelectedImage(uri);
       
-      // Add image message to chat
       const newMsg = { id: Date.now().toString(), sender: "user", type: "image", content: uri };
       setMessages((prev) => [...prev, newMsg]);
 
-      // AI Prompt
       setTimeout(() => {
-        setMessages((prev) => [...prev, { id: Date.now().toString() + "ai", sender: "ai", type: "text", content: "Great photo! Now describe the design style you want." }]);
+        setMessages((prev) => [...prev, { 
+          id: Date.now().toString() + "ai", 
+          sender: "ai", 
+          type: "text", 
+          content: "Great photo! Now describe the design style you want." 
+        }]);
       }, 600);
     }
   };
@@ -88,7 +90,7 @@ export default function AIDesigner() {
     setInput("");
     Keyboard.dismiss();
 
-    // Add user text
+    // Add user text message
     setMessages((prev) => [...prev, { id: Date.now().toString(), sender: "user", type: "text", content: userPrompt }]);
 
     if (!selectedImage) {
@@ -102,6 +104,7 @@ export default function AIDesigner() {
 
     try {
       const formData = new FormData();
+      // FIXED: Field name must match server.js (upload.single('photo'))
       formData.append("photo", {
         uri: selectedImage,
         name: "room.jpg",
@@ -109,37 +112,57 @@ export default function AIDesigner() {
       });
       formData.append("prompt", userPrompt);
 
-      const response = await fetch(API_URL, {
+      // FIXED: Endpoint must match server.js (/api/redesign-room)
+      const response = await fetch(`${API_URL}/api/redesign-room`, {
         method: "POST",
         body: formData,
         headers: {
-          "Content-Type": "multipart/form-data",
+          "Accept": "application/json",
+          "ngrok-skip-browser-warning": "true", // This is the most important line!
         },
       });
 
-      if (!response.ok) throw new Error("Server Error");
+      if (!response.ok) throw new Error("Server Error - Ensure Colab is Running");
 
       const blob = await response.blob();
       const reader = new FileReader();
       reader.readAsDataURL(blob);
       reader.onloadend = () => {
         const resultUri = reader.result;
-        setMessages((prev) => [...prev, { id: Date.now().toString() + "res", sender: "ai", type: "image", content: resultUri }]);
+        setMessages((prev) => [
+          ...prev, 
+          { id: Date.now().toString() + "res", sender: "ai", type: "image", content: resultUri }
+        ]);
         setLoading(false);
       };
     } catch (error) {
-      console.log(error);
-      setMessages((prev) => [...prev, { id: Date.now().toString(), sender: "ai", type: "text", content: "Sorry, I couldn't connect to the AI server. Please check your connection." }]);
+      console.log("AI Error:", error);
+      setMessages((prev) => [...prev, { 
+        id: Date.now().toString(), 
+        sender: "ai", 
+        type: "text", 
+        content: "Sorry, I couldn't connect to the AI server. Check your Ngrok link and Colab status." 
+      }]);
       setLoading(false);
     }
   };
 
-  const openChatScreen = (mode) => {
-    if (mode === "design") {
-      setView("design");
-    } else {
-      router.push(`/User/AIDesignerChat?tab=${mode}&chatId=new`);
-    }
+  const openChatScreen = (selectedMode) => {
+    setMode(selectedMode);
+    
+    // Custom welcome message based on selection
+    const welcomeMsg = selectedMode === "customize"
+      ? "Hello! I'm your AI Customizer. 🛋️\n\nUpload a room photo and tell me what furniture or colors you want to change."
+      : "Hello! I'm your AI Interior Designer. 🎨\n\nUpload a photo of your room and tell me what style you'd like (e.g., 'Modern', 'Industrial', 'Cozy').";
+
+    setMessages([{
+      id: "welcome",
+      sender: "ai",
+      type: "text",
+      content: welcomeMsg,
+    }]);
+
+    setView("design");
   };
 
   const openChatHistory = (tab, chatId) => {
@@ -171,7 +194,6 @@ export default function AIDesigner() {
       >
         {view === "dashboard" ? (
           <>
-            {/* ✅ DASHBOARD VIEW */}
             <View style={styles.cardsContainer}>
               <TouchableOpacity onPress={() => openChatScreen("design")} style={styles.cardTeal}>
                 <View style={styles.cardContent}>
@@ -196,12 +218,7 @@ export default function AIDesigner() {
                   key={`${chat.id}-${chat.title}`}
                   style={styles.historyItem}
                   activeOpacity={0.7}
-                  onPress={() =>
-                    openChatHistory(
-                      chatSummaries.design.includes(chat) ? "design" : "customize",
-                      chat.id
-                    )
-                  }
+                  onPress={() => openChatHistory(chatSummaries.design.includes(chat) ? "design" : "customize", chat.id)}
                 >
                   <View style={styles.historyHeader}>
                     <View style={styles.historyAccent} />
@@ -214,7 +231,6 @@ export default function AIDesigner() {
             </ScrollView>
           </>
         ) : (
-          /* ✅ AI DESIGNER VIEW */
           <View style={styles.chatContainer}>
             <View style={styles.header}>
               <TouchableOpacity onPress={() => setView("dashboard")}>
@@ -232,7 +248,6 @@ export default function AIDesigner() {
               onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
             />
 
-            {/* Input Area */}
             <View style={styles.inputArea}>
               <TouchableOpacity onPress={pickImage} style={styles.attachBtn}>
                 <Ionicons name="camera" size={24} color="#0F3E48" />
@@ -242,6 +257,7 @@ export default function AIDesigner() {
                 placeholder="Type a style (e.g. Modern)..."
                 value={input}
                 onChangeText={setInput}
+                placeholderTextColor="#A0B1B4"
               />
               <TouchableOpacity onPress={handleSend} style={styles.sendBtn} disabled={loading}>
                 {loading ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="send" size={20} color="#fff" />}
@@ -250,7 +266,6 @@ export default function AIDesigner() {
           </View>
         )}
       </KeyboardAvoidingView>
-
       <BottomNavbar subType={subType} />
     </View>
   );
@@ -259,108 +274,57 @@ export default function AIDesigner() {
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: "#F3F9FA" },
   container: { flex: 1, paddingHorizontal: 20, paddingTop: 50 },
-
-  // ✅ Top Cards side-by-side
   cardsContainer: { flexDirection: "row", justifyContent: "space-between", marginBottom: 30 },
   cardTeal: {
     flex: 1,
     height: 120,
     borderRadius: 20,
-    backgroundColor: "#fce4ec", // pastel pink
+    backgroundColor: "#E0F2F1", 
     elevation: 4,
     shadowColor: "#000",
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.1,
     shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
     marginHorizontal: 4,
   },
   cardPink: {
     flex: 1,
     height: 120,
     borderRadius: 20,
-    backgroundColor: "#fce4ec", // pastel pink
+    backgroundColor: "#fce4ec", 
     elevation: 4,
     shadowColor: "#000",
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.1,
     shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
     marginHorizontal: 4,
   },
-  cardContent: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  cardIcon: {
-    width: 48,
-    height: 48,
-    resizeMode: "contain",
-    marginBottom: 10,
-  },
-  cardText: {
-    fontWeight: "600",
-    color: "#0F3E48",
-    fontSize: 14,
-    textAlign: "center",
-    letterSpacing: 0.5,
-  },
-
-  // ✅ History Section
-  historyTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#912f56",
-    marginBottom: 18,
-    marginLeft: 4,
-  },
+  cardContent: { flex: 1, justifyContent: "center", alignItems: "center" },
+  cardIcon: { width: 48, height: 48, resizeMode: "contain", marginBottom: 10 },
+  cardText: { fontWeight: "600", color: "#0F3E48", fontSize: 14, textAlign: "center" },
+  historyTitle: { fontSize: 20, fontWeight: "700", color: "#912f56", marginBottom: 18, marginLeft: 4 },
   historyContainer: { flex: 1, marginBottom: 80 },
-  historyItem: {
-    backgroundColor: "#faf9f6",
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 14,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
+  historyItem: { backgroundColor: "#faf9f6", padding: 16, borderRadius: 16, marginBottom: 14, elevation: 2 },
   historyHeader: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
-  historyAccent: {
-    width: 6,
-    height: 20,
-    backgroundColor: "#912f56",
-     borderRadius: 3,
-    marginRight: 8,
-  },
+  historyAccent: { width: 6, height: 20, backgroundColor: "#912f56", borderRadius: 3, marginRight: 8 },
   historyItemTitle: { fontWeight: "700", color: "#0F3E48", fontSize: 16 },
   historyItemSnippet: { color: "#4A6B70", fontSize: 13, marginTop: 2 },
   historyItemDate: { color: "#888", fontSize: 12, marginTop: 6, textAlign: "right" },
-
-  // ✅ AI Design Styles
   chatContainer: { flex: 1, paddingBottom: 80 },
   header: { flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 15 },
   headerTitle: { fontSize: 22, fontWeight: "700", color: "#0F3E48" },
-  
   chatList: { paddingBottom: 20 },
   msgRow: { flexDirection: "row", marginBottom: 15, alignItems: "flex-end" },
   msgRowUser: { justifyContent: "flex-end" },
   msgRowAI: { justifyContent: "flex-start" },
-  
   aiAvatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#0F3E48", alignItems: "center", justifyContent: "center", marginRight: 8 },
-  
   msgBubble: { maxWidth: "75%", padding: 12, borderRadius: 18 },
   msgBubbleUser: { backgroundColor: "#0F3E48", borderBottomRightRadius: 4 },
   msgBubbleAI: { backgroundColor: "#fff", borderBottomLeftRadius: 4, borderWidth: 1, borderColor: "#E1E8EA" },
-  
   msgText: { fontSize: 15, lineHeight: 22 },
   msgTextUser: { color: "#fff" },
   msgTextAI: { color: "#333" },
-  
   msgImage: { width: 200, height: 200, borderRadius: 12 },
-
-  inputArea: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", padding: 10, borderRadius: 30, elevation: 5, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 5, marginBottom: 10 },
+  inputArea: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", padding: 10, borderRadius: 30, elevation: 5, marginBottom: 10 },
   attachBtn: { padding: 10 },
-  chatInput: { flex: 1, fontSize: 16, maxHeight: 100, paddingHorizontal: 10 },
+  chatInput: { flex: 1, fontSize: 16, maxHeight: 100, paddingHorizontal: 10, color: "#0F3E48" },
   sendBtn: { backgroundColor: "#0F3E48", width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", marginLeft: 5 },
 });

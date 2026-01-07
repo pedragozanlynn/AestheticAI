@@ -3,21 +3,21 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import useSubscriptionType from "../../services/useSubscriptionType";
 import BottomNavbar from "../components/BottomNav";
 
 // ✅ UPDATED API URL (Using your IP for Expo Go)
-const API_URL = "http://192.168.1.8:3000/api/redesign-room";
+const API_URL = "https://baggiest-sterigmatic-kandi.ngrok-free.dev";
 
 export default function Design() {
   const router = useRouter();
@@ -30,9 +30,9 @@ export default function Design() {
 
   const pickImage = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: (ImagePicker.MediaType || ImagePicker.MediaTypeOptions).Images,
       allowsEditing: true,
-      quality: 1,
+      quality: 0.7,
     });
 
     if (!res.canceled) {
@@ -56,11 +56,12 @@ export default function Design() {
       });
       formData.append("prompt", prompt);
 
-      const response = await fetch(API_URL, {
+      const response = await fetch(`${API_URL}/api/redesign-room`, {
         method: "POST",
         body: formData,
         headers: {
-          "Content-Type": "multipart/form-data",
+          "Accept": "application/json",
+          "ngrok-skip-browser-warning": "true", // This is the most important line!
         },
       });
 

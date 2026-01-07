@@ -13,7 +13,7 @@ app.use((req, res, next) => {
 });
 
 // 1. Paste your Colab URL here (Update this every time you restart Colab)
-const COLAB_URL = "https://baggiest-sterigmatic-kandi.ngrok-free.dev";
+const COLAB_URL = "INSERT_YOUR_COLAB_URL_HERE"; // ⚠️ REPLACE THIS with your new Colab Link
 
 app.post('/api/redesign-room', upload.single('photo'), async (req, res) => {
     console.log("-----------------------------------------");
@@ -49,7 +49,10 @@ app.post('/api/redesign-room', upload.single('photo'), async (req, res) => {
         res.send(aiResponse.data);
 
     } catch (error) {
-        console.error("Error connecting to AI:", error.message);
+        console.error("❌ Error connecting to AI:", error.message);
+        if (error.response) {
+            console.error("Response Data:", error.response.data.toString());
+        }
         res.status(500).json({ error: "AI Service is currently offline or timing out." });
     }
 });

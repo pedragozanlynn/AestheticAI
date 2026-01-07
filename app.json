@@ -1,10 +1,11 @@
 {
   "expo": {
+    "scheme": "aestheticai",
     "extra": {
       "eas": {
         "projectId": "d2eebfbe-0506-416e-98ac-6ced22cf0fb4"
       },
-      "forwardingUrl": "https://eight-horses-laugh.loca.lt"
+      "forwardingUrl": "https://smart-badgers-pump.loca.lt"
     },
     "android": {
       "package": "com.mcclien.AestheticAI"

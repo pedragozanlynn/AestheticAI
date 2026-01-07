@@ -3,17 +3,17 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  Alert,
-  Dimensions,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  StatusBar,
+    Alert,
+    Dimensions,
+    Image,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { auth, db } from "../../config/firebase";
 import useSubscriptionType from "../../services/useSubscriptionType";
@@ -87,7 +87,7 @@ export default function Home() {
   };
 
   const goToDesignAI = () => router.push("/User/Design");
-  const goToCustomize = () => router.push("/User/Customize");
+  const goToCustomize = () => router.push("/User/AIDesigner");
   const goToProjects = () => router.push("/User/Projects");
 
   useEffect(() => {
@@ -206,7 +206,7 @@ export default function Home() {
                label="Customize" 
                desc="Edit Room" 
                color="#DB2777" 
-               onPress={() => router.push("/User/Customize")} 
+               onPress={goToCustomize} 
              />
              <Action 
                icon="chatbubbles" 
